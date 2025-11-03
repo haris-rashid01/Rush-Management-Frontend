@@ -1,0 +1,180 @@
+Full Prompt for Creating Rush Corporation HTTPS Website (Next.js Version)
+
+Project Title: Rush Corporation Company Portal Website
+
+Purpose:
+Build a secure, user-friendly, responsive HTTPS website using Next.js for Rush Corporation. The portal will manage employee utilities, company documents, policies, religious reminders, and other HR functionalities.
+
+Website Features & Requirements
+
+1. Layout & Navigation
+
+Left-side navigation bar for all sections with collapsible submenus.
+
+Sections: Dashboard/Home, Namaz Alarm, Duas, Timetable, Leave Form, Onboarding, Documents, Company Info, Policies, Contact.
+
+Responsive design: collapsible sidebar on mobile, fixed sidebar on desktop.
+
+Clean, modern industry-level UI with light blue and white color scheme.
+
+Smooth transitions between pages.
+
+2. Homepage / Dashboard
+
+Welcome message and brief overview of Rush Corporation.
+
+Key stats: number of employees, pending leave requests, upcoming events.
+
+Quick access widgets: Namaz alarms, timetable overview, company announcements.
+
+3. Namaz Alarm
+
+Admin and user ability to set alarms for all five daily prayers.
+
+Adjust alarms based on user location (optional: integrate API like Aladhan).
+
+Notifications via browser push or sound alerts.
+
+Optional: show countdown timer until next prayer.
+
+4. Basic Duas Section
+
+Display important Duas with Arabic text and translation.
+
+Optional audio playback for Duas.
+
+Searchable/filterable list.
+
+5. Timetable / Schedule
+
+Weekly employee timetable view.
+
+CRUD functionality: Add, edit, delete events.
+
+Optional export to PDF or sync with Google Calendar.
+
+6. Leave Form Submission
+
+Form fields: Employee Name, ID, Department, Leave Type, Start Date, End Date, Reason.
+
+Submit button saves data to backend.
+
+Admin panel to approve/reject leave requests with notifications.
+
+7. Onboarding / Employee Management
+
+Admin section to add new employees: Name, Contact Info, Department, Joining Date, Role, Photo.
+
+List of employees with edit/delete functionality.
+
+Search and filter employees by department, role, or joining date.
+
+8. Documents Section
+
+Upload and manage company documents.
+
+Categories: HR, Policies, Training, Projects.
+
+Secure download links with role-based access control.
+
+Optional version history for documents.
+
+9. Company Info Page
+
+Display company mission, vision, and history.
+
+Key achievements, statistics, and highlights.
+
+Optional embedded media (images or videos).
+
+10. Policies Section
+
+Display company policies: leave policy, code of conduct, security policy, etc.
+
+Downloadable PDF links.
+
+Categorized for easy navigation.
+
+11. Contact Page
+
+Contact form with Name, Email, Message.
+
+Company address with embedded map (Google Maps API).
+
+Optional: automated email notifications to admin.
+
+Technical Requirements
+
+Frontend:
+
+Next.js + React.js
+
+TailwindCSS or Material-UI for modern styling
+
+Responsive design for desktop, tablet, mobile
+
+Left-side collapsible sidebar navigation
+
+Backend:
+
+Node.js + Express API (or Next.js API routes)
+
+Database: PostgreSQL or MongoDB for employee data, leave requests, documents
+
+JWT authentication or session-based login for admin and employees
+
+Security:
+
+HTTPS enabled (Next.js with Vercel or custom SSL)
+
+Role-based access control (Admin vs Employee)
+
+Input validation and secure file uploads
+
+Optional Enhancements:
+
+Browser notifications for Namaz alarms
+
+Dark mode toggle
+
+PDF export for timetable and leave forms
+
+Real-time updates using WebSockets or Server-Sent Events
+
+Admin Panel Features
+
+Login authentication with role-based access
+
+Dashboard overview: leave requests, employee stats, upcoming events
+
+CRUD operations: employees, documents, timetable, Duas
+
+Approve/reject leave requests with notifications
+
+Deliverables
+
+Fully functional Next.js HTTPS website
+
+Source code repository (GitHub/Bitbucket) with commits
+
+Database setup scripts and instructions
+
+Documentation for:
+
+Running the website locally
+
+Managing employees, leave requests, documents
+
+Using the admin panel
+
+If you want, I can also create a full Next.js skeleton project with:
+
+Left sidebar navigation
+
+All main pages (Namaz Alarm, Duas, Timetable, Leave Form, Onboarding, Documents, Company Info, Policies)
+
+Light blue and white professional theme
+
+Placeholder components ready for backend integration
+
+This way, you can directly start coding or deploy.
