@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { userService } from "@/services/userService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,12 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Briefcase, 
+import {
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Briefcase,
   Calendar,
   Camera,
   Save,
@@ -26,22 +27,40 @@ import {
 import { useNotifications } from "@/hooks/use-notifications";
 
 export default function ProfileSettings() {
-  const { user } = useAuth();
-  const { showSuccess } = useNotifications();
+  const { user, refreshUser } = useAuth();
+  const { showSuccess, showError } = useNotifications();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
-    firstName: user?.firstName || "",
-    lastName: user?.lastName || "",
-    email: user?.email || "",
-    phone: "+1 (555) 123-4567",
-    department: user?.department || "",
-    position: user?.position || "",
-    bio: "Dedicated software engineer with 5+ years of experience in full-stack development.",
-    location: "New York, NY",
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    department: "",
+    position: "",
+    bio: "",
+    location: "",
     timezone: "America/New_York",
-    startDate: "2022-03-15",
-    employeeId: "RC-2024-001"
+    startDate: "",
+    employeeId: ""
   });
+
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        department: user.department || "",
+        position: user.position || "",
+        bio: user.bio || "",
+        location: user.location || "",
+        timezone: user.timezone || "America/New_York",
+        startDate: user.startDate ? new Date(user.startDate).toISOString().split('T')[0] : "",
+        employeeId: user.employeeId || ""
+      });
+    }
+  }, [user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({
@@ -57,9 +76,22 @@ export default function ProfileSettings() {
     }));
   };
 
-  const handleSave = () => {
-    showSuccess("Profile Updated", "Your profile information has been successfully updated.");
-    setIsEditing(false);
+  const handleSave = async () => {
+    try {
+      if (!user?.id) return;
+
+      await userService.updateUser(user.id, {
+        ...formData,
+        startDate: formData.startDate ? new Date(formData.startDate).toISOString() : null
+      });
+
+      await refreshUser();
+      showSuccess("Profile Updated", "Your profile information has been successfully updated.");
+      setIsEditing(false);
+    } catch (error) {
+      showError("Update Failed", "Failed to update profile information.");
+      console.error(error);
+    }
   };
 
   const getInitials = (firstName: string, lastName: string) => {
@@ -68,7 +100,7 @@ export default function ProfileSettings() {
 
   const departments = [
     "Information Technology",
-    "Human Resources", 
+    "Human Resources",
     "Finance & Accounting",
     "Operations",
     "Marketing",
@@ -79,7 +111,7 @@ export default function ProfileSettings() {
 
   const timezones = [
     "America/New_York",
-    "America/Chicago", 
+    "America/Chicago",
     "America/Denver",
     "America/Los_Angeles",
     "Europe/London",
@@ -166,7 +198,7 @@ export default function ProfileSettings() {
                 <div className="flex items-center gap-3 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Start Date:</span>
-                  <span className="font-medium">{new Date(formData.startDate).toLocaleDateString()}</span>
+                  <span className="font-medium">{formData.startDate ? new Date(formData.startDate).toLocaleDateString() : 'N/A'}</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground" />

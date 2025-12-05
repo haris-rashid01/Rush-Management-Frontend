@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { Bell, CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useAuth } from '@/hooks/use-auth';
 
 export interface Notification {
   id: string;
@@ -36,6 +38,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [permissionGranted, setPermissionGranted] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     // Check if browser supports notifications
@@ -44,12 +47,37 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  const fetchNotifications = useCallback(async () => {
+    if (!user) return;
+    try {
+      const response = await api.get('/notifications');
+      const mappedNotifications: Notification[] = response.data.map((n: any) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type.toLowerCase() as any, // Map INFO -> info
+        timestamp: new Date(n.createdAt),
+        read: n.isRead,
+        persistent: true
+      }));
+      setNotifications(mappedNotifications);
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchNotifications();
+    // In a real app with socket.io, we would listen for new notifications here
+    // and append them to the list
+  }, [fetchNotifications]);
+
   const generateId = () => Math.random().toString(36).substr(2, 9);
 
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     const newNotification: Notification = {
       ...notification,
-      id: generateId(),
+      id: generateId(), // This will be temporary until we refresh or if we implement optimistic updates properly with backend response
       timestamp: new Date(),
       read: false,
     };
@@ -60,7 +88,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const showSuccess = useCallback((title: string, message: string, persistent = false) => {
     const notification = addNotification({ title, message, type: 'success', persistent });
-    
+
     toast({
       title: (
         <div className="flex items-center gap-2">
@@ -77,7 +105,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const showError = useCallback((title: string, message: string, persistent = true) => {
     const notification = addNotification({ title, message, type: 'error', persistent });
-    
+
     toast({
       title: (
         <div className="flex items-center gap-2">
@@ -95,7 +123,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const showWarning = useCallback((title: string, message: string, persistent = false) => {
     const notification = addNotification({ title, message, type: 'warning', persistent });
-    
+
     toast({
       title: (
         <div className="flex items-center gap-2">
@@ -112,7 +140,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const showInfo = useCallback((title: string, message: string, persistent = false) => {
     const notification = addNotification({ title, message, type: 'info', persistent });
-    
+
     toast({
       title: (
         <div className="flex items-center gap-2">
@@ -122,31 +150,60 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       ),
       description: message,
       className: "border-blue-200 bg-blue-50 text-blue-900",
+      variant: "destructive",
     });
 
     return notification;
   }, [addNotification]);
 
-  const markAsRead = useCallback((id: string) => {
-    setNotifications(prev => 
-      prev.map(notification => 
+  const markAsRead = useCallback(async (id: string) => {
+    // Optimistic update
+    setNotifications(prev =>
+      prev.map(notification =>
         notification.id === id ? { ...notification, read: true } : notification
       )
     );
+
+    try {
+      await api.put(`/notifications/${id}/read`);
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
   }, []);
 
-  const markAllAsRead = useCallback(() => {
-    setNotifications(prev => 
+  const markAllAsRead = useCallback(async () => {
+    // Optimistic update
+    setNotifications(prev =>
       prev.map(notification => ({ ...notification, read: true }))
     );
+
+    try {
+      await api.put('/notifications/read-all');
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+    }
   }, []);
 
-  const removeNotification = useCallback((id: string) => {
+  const removeNotification = useCallback(async (id: string) => {
+    // Optimistic update
     setNotifications(prev => prev.filter(notification => notification.id !== id));
+
+    try {
+      await api.delete(`/notifications/${id}`);
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+    }
   }, []);
 
-  const clearAll = useCallback(() => {
+  const clearAll = useCallback(async () => {
+    // Optimistic update
     setNotifications([]);
+
+    try {
+      await api.delete('/notifications');
+    } catch (error) {
+      console.error('Failed to clear notifications:', error);
+    }
   }, []);
 
   const requestPermission = useCallback(async (): Promise<boolean> => {

@@ -9,6 +9,7 @@ import { AdminSidebar } from "@/components/admin-sidebar";
 import { ThemeProvider } from "@/lib/use-theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationProvider } from "@/hooks/use-notifications";
+import { SocketProvider } from "@/hooks/use-socket";
 import { NotificationCenter } from "@/components/notification-center";
 import { AuthProvider, useAuth, ProtectedRoute } from "@/hooks/use-auth";
 import { UserProfile } from "@/components/user-profile";
@@ -29,7 +30,7 @@ import Notifications from "@/pages/notifications";
 import ProfileSettings from "@/pages/profile-settings";
 import NotificationPreferences from "@/pages/notification-preferences";
 import AccountSettings from "@/pages/account-settings";
-import PrivacySecurity from "@/pages/privacy-security";
+// import PrivacySecurity from "@/pages/privacy-security";
 import HelpSupport from "@/pages/help-support";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminEmployees from "@/pages/admin/employees";
@@ -37,17 +38,18 @@ import AdminLeaveRequests from "@/pages/admin/leave-requests";
 import AdminDocuments from "@/pages/admin/documents";
 import AdminPolicies from "@/pages/admin/policies";
 import AdminAnnouncements from "@/pages/admin/announcements";
+import Announcements from "@/pages/announcements";
 import AdminSettings from "@/pages/admin/settings";
-import AdminAnalytics from "@/pages/admin/analytics";
+// import AdminAnalytics from "@/pages/admin/analytics";
 import AdminDepartments from "@/pages/admin/departments";
-import AdminRoles from "@/pages/admin/roles";
-import AdminAttendance from "@/pages/admin/attendance";
+// import AdminRoles from "@/pages/admin/roles";
 import AdminDuasManagement from "@/pages/admin/duas-management";
 import AdminLogs from "@/pages/admin/logs";
-import AdminDatabase from "@/pages/admin/database";
+// import AdminDatabase from "@/pages/admin/database";
 import AdminTimetable from "@/pages/admin/timetable";
 import AdminPrayerTimes from "@/pages/admin/prayer-times";
 import AdminAccessories from "@/pages/admin/accessories";
+import AdminVisitors from "@/pages/admin/visitors";
 
 function AuthenticatedApp() {
   const { user } = useAuth();
@@ -93,21 +95,21 @@ function AuthenticatedApp() {
                     <Route path="/admin/policies" component={AdminPolicies} />
                     <Route path="/admin/announcements" component={AdminAnnouncements} />
                     <Route path="/admin/settings" component={AdminSettings} />
-                    <Route path="/admin/analytics" component={AdminAnalytics} />
+                    {/* <Route path="/admin/analytics" component={AdminAnalytics} /> */}
                     <Route path="/admin/departments" component={AdminDepartments} />
-                    <Route path="/admin/roles" component={AdminRoles} />
-                    <Route path="/admin/attendance" component={AdminAttendance} />
+                    {/* <Route path="/admin/roles" component={AdminRoles} /> */}
                     <Route path="/admin/duas" component={AdminDuasManagement} />
                     <Route path="/admin/logs" component={AdminLogs} />
-                    <Route path="/admin/database" component={AdminDatabase} />
+                    {/* <Route path="/admin/database" component={AdminDatabase} /> */}
                     <Route path="/admin/timetable" component={AdminTimetable} />
                     <Route path="/admin/prayer-times" component={AdminPrayerTimes} />
                     <Route path="/admin/accessories" component={AdminAccessories} />
+                    <Route path="/admin/visitors" component={AdminVisitors} />
                     {/* Admin can also access profile settings */}
                     <Route path="/profile-settings" component={ProfileSettings} />
                     <Route path="/notification-preferences" component={NotificationPreferences} />
                     <Route path="/account-settings" component={AccountSettings} />
-                    <Route path="/privacy-security" component={PrivacySecurity} />
+                    {/* <Route path="/privacy-security" component={PrivacySecurity} /> */}
                     <Route path="/help-support" component={HelpSupport} />
                   </>
                 ) : (
@@ -122,12 +124,13 @@ function AuthenticatedApp() {
                     <Route path="/documents" component={Documents} />
                     <Route path="/company" component={Company} />
                     <Route path="/policies" component={Policies} />
+                    <Route path="/announcements" component={Announcements} />
                     <Route path="/contact" component={Contact} />
                     <Route path="/notifications" component={Notifications} />
                     <Route path="/profile-settings" component={ProfileSettings} />
                     <Route path="/notification-preferences" component={NotificationPreferences} />
                     <Route path="/account-settings" component={AccountSettings} />
-                    <Route path="/privacy-security" component={PrivacySecurity} />
+                    {/* <Route path="/privacy-security" component={PrivacySecurity} /> */}
                     <Route path="/help-support" component={HelpSupport} />
                   </>
                 )}
@@ -197,10 +200,12 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <NotificationProvider>
-            <TooltipProvider>
-              <Router />
-              <Toaster />
-            </TooltipProvider>
+            <SocketProvider>
+              <TooltipProvider>
+                <Router />
+                <Toaster />
+              </TooltipProvider>
+            </SocketProvider>
           </NotificationProvider>
         </AuthProvider>
       </ThemeProvider>

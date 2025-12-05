@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LeaveRequestCard } from "@/components/leave-request-card";
 import { Button } from "@/components/ui/button";
@@ -27,66 +27,41 @@ import {
 import { format, differenceInDays } from "date-fns";
 import { useNotifications } from "@/hooks/use-notifications";
 
+const API_BASE_URL =
+  (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:3001/api";
+
+type LeaveStatusUi = "pending" | "approved" | "rejected" | "cancelled";
+
+interface ApiLeaveRequest {
+  id: string;
+  user: {
+    firstName: string;
+    lastName: string;
+    department?: string | null;
+  };
+  leaveType: "SICK" | "VACATION" | "PERSONAL" | "MATERNITY" | "PATERNITY";
+  startDate: string;
+  endDate: string;
+  reason?: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  createdAt: string;
+}
+
 interface LeaveRequest {
-  id: number;
+  id: string;
   employeeName: string;
-  employeeId: string;
   department: string;
   leaveType: string;
   startDate: string;
   endDate: string;
   reason: string;
-  status: "pending" | "approved" | "rejected";
+  status: LeaveStatusUi;
   appliedDate: string;
-  approvedBy?: string;
-  documents?: string[];
   days: number;
 }
 
 export default function Leave() {
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([
-    {
-      id: 1,
-      employeeName: "Sarah Johnson",
-      employeeId: "EMP001",
-      department: "Engineering",
-      leaveType: "Annual Leave",
-      startDate: "2024-12-20",
-      endDate: "2024-12-27",
-      reason: "Family vacation during holidays",
-      status: "pending",
-      appliedDate: "2024-12-10",
-      days: 8
-    },
-    {
-      id: 2,
-      employeeName: "Mike Chen",
-      employeeId: "EMP002",
-      department: "Marketing",
-      leaveType: "Sick Leave",
-      startDate: "2024-11-15",
-      endDate: "2024-11-16",
-      reason: "Medical appointment",
-      status: "approved",
-      appliedDate: "2024-11-10",
-      approvedBy: "HR Manager",
-      days: 2
-    },
-    {
-      id: 3,
-      employeeName: "Emily Davis",
-      employeeId: "EMP003",
-      department: "Sales",
-      leaveType: "Personal Leave",
-      startDate: "2024-12-10",
-      endDate: "2024-12-11",
-      reason: "Personal matters",
-      status: "rejected",
-      appliedDate: "2024-12-05",
-      days: 2
-    },
-  ]);
-
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [formData, setFormData] = useState({
     employeeName: "",
     employeeId: "",
@@ -117,47 +92,150 @@ export default function Leave() {
     return differenceInDays(new Date(end), new Date(start)) + 1;
   };
 
-  const submitLeaveRequest = (e: React.FormEvent) => {
+  // Load my leave requests from backend
+  useEffect(() => {
+    const fetchMyLeaveRequests = async () => {
+      try {
+        const token = localStorage.getItem("rushcorp_token");
+        if (!token) {
+          return;
+        }
+
+        const res = await fetch(`${API_BASE_URL}/leave?page=1&limit=50`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (!res.ok) {
+          console.error("Failed to load leave requests", res.status);
+          return;
+        }
+
+        const json = await res.json();
+        const apiRequests: ApiLeaveRequest[] = json.data?.requests ?? [];
+
+        const mapped: LeaveRequest[] = apiRequests.map((r) => {
+          const days = calculateDays(r.startDate, r.endDate);
+
+          const status: LeaveStatusUi =
+            r.status === "APPROVED"
+              ? "approved"
+              : r.status === "REJECTED"
+              ? "rejected"
+              : r.status === "CANCELLED"
+              ? "cancelled"
+              : "pending";
+
+          return {
+            id: r.id,
+            employeeName: `${r.user.firstName} ${r.user.lastName}`.trim(),
+            department: r.user.department ?? "Unknown",
+            leaveType: r.leaveType,
+            startDate: format(new Date(r.startDate), "yyyy-MM-dd"),
+            endDate: format(new Date(r.endDate), "yyyy-MM-dd"),
+            reason: r.reason ?? "",
+            status,
+            appliedDate: format(new Date(r.createdAt), "yyyy-MM-dd"),
+            days,
+          };
+        });
+
+        setLeaveRequests(mapped);
+      } catch (err) {
+        console.error("Failed to load leave requests", err);
+      }
+    };
+
+    fetchMyLeaveRequests();
+  }, []);
+
+  const submitLeaveRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.employeeName || !formData.startDate || !formData.endDate || !formData.reason) {
-      showError("Missing Information", "Please fill in all required fields");
+
+    if (!formData.startDate || !formData.endDate || !formData.leaveType) {
+      showError("Missing Information", "Please select leave type and dates");
       return;
     }
 
-    const days = calculateDays(formData.startDate, formData.endDate);
-    
-    const newRequest: LeaveRequest = {
-      id: Date.now(),
-      employeeName: formData.employeeName,
-      employeeId: formData.employeeId,
-      department: formData.department,
-      leaveType: formData.leaveType,
-      startDate: formData.startDate,
-      endDate: formData.endDate,
-      reason: formData.reason,
-      status: "pending",
-      appliedDate: format(new Date(), "yyyy-MM-dd"),
-      days
-    };
+    try {
+      const token = localStorage.getItem("rushcorp_token");
+      if (!token) {
+        showError("Not Authenticated", "Please log in to submit a leave request");
+        return;
+      }
 
-    setLeaveRequests(prev => [newRequest, ...prev]);
-    
-    // Reset form
-    setFormData({
-      employeeName: "",
-      employeeId: "",
-      department: "",
-      leaveType: "",
-      startDate: "",
-      endDate: "",
-      reason: "",
-      emergencyContact: "",
-      documents: []
-    });
+      const res = await fetch(`${API_BASE_URL}/leave`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          leaveType: formData.leaveType,
+          startDate: formData.startDate,
+          endDate: formData.endDate,
+          reason: formData.reason,
+        }),
+      });
 
-    showSuccess("Leave Request Submitted", `Your ${days}-day leave request has been submitted for approval`);
-    showInfo("Next Steps", "You will receive a notification once your request is reviewed");
+      if (!res.ok) {
+        const errorJson = await res.json().catch(() => null);
+        console.error("Create leave failed:", res.status, errorJson);
+        showError("Request Failed", "Could not submit your leave request");
+        return;
+      }
+
+      const json = await res.json();
+      const created: ApiLeaveRequest | undefined = json.data?.leaveRequest;
+
+      if (created) {
+        const days = calculateDays(created.startDate, created.endDate);
+        const status: LeaveStatusUi =
+          created.status === "APPROVED"
+            ? "approved"
+            : created.status === "REJECTED"
+            ? "rejected"
+            : created.status === "CANCELLED"
+            ? "cancelled"
+            : "pending";
+
+        const mapped: LeaveRequest = {
+          id: created.id,
+          employeeName: `${created.user.firstName} ${created.user.lastName}`.trim(),
+          department: created.user.department ?? "Unknown",
+          leaveType: created.leaveType,
+          startDate: format(new Date(created.startDate), "yyyy-MM-dd"),
+          endDate: format(new Date(created.endDate), "yyyy-MM-dd"),
+          reason: created.reason ?? "",
+          status,
+          appliedDate: format(new Date(created.createdAt), "yyyy-MM-dd"),
+          days,
+        };
+
+        setLeaveRequests((prev) => [mapped, ...prev]);
+      }
+
+      // Reset form
+      setFormData({
+        employeeName: "",
+        employeeId: "",
+        department: "",
+        leaveType: "",
+        startDate: "",
+        endDate: "",
+        reason: "",
+        emergencyContact: "",
+        documents: [],
+      });
+
+      showSuccess("Leave Request Submitted", "Your leave request has been submitted for approval");
+      showInfo("Next Steps", "You will receive a notification once your request is reviewed");
+    } catch (err) {
+      console.error("Submit leave error", err);
+      showError("Request Failed", "An error occurred while submitting your leave request");
+    }
   };
 
   const approveRequest = (id: number) => {
@@ -300,17 +378,20 @@ export default function Leave() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="leave-type">Leave Type *</Label>
-                    <Select value={formData.leaveType} onValueChange={(value) => setFormData(prev => ({ ...prev, leaveType: value }))}>
+                    <Select
+                      value={formData.leaveType}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, leaveType: value }))}
+                    >
                       <SelectTrigger id="leave-type" data-testid="select-leave-type">
                         <SelectValue placeholder="Select leave type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Annual Leave">🏖️ Annual Leave</SelectItem>
-                        <SelectItem value="Sick Leave">🏥 Sick Leave</SelectItem>
-                        <SelectItem value="Personal Leave">👤 Personal Leave</SelectItem>
-                        <SelectItem value="Emergency Leave">🚨 Emergency Leave</SelectItem>
-                        <SelectItem value="Maternity Leave">👶 Maternity Leave</SelectItem>
-                        <SelectItem value="Paternity Leave">👨‍👶 Paternity Leave</SelectItem>
+                        {/* Map UI labels to backend enum values */}
+                        <SelectItem value="VACATION">🏖️ Annual Leave</SelectItem>
+                        <SelectItem value="SICK">🏥 Sick Leave</SelectItem>
+                        <SelectItem value="PERSONAL">👤 Personal Leave</SelectItem>
+                        <SelectItem value="MATERNITY">👶 Maternity Leave</SelectItem>
+                        <SelectItem value="PATERNITY">👨‍👶 Paternity Leave</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

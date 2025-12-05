@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
+// Base URL for the backend API
+const API_BASE_URL =
+  (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:3001/api";
+
 interface User {
   id: string;
   email: string;
@@ -8,7 +12,16 @@ interface User {
   department?: string;
   position?: string;
   avatar?: string;
-  role: 'admin' | 'employee';
+  // Frontend roles (mapped from backend roles)
+  role: "admin" | "employee";
+  phone?: string;
+  bio?: string;
+  location?: string;
+  timezone?: string;
+  startDate?: string;
+  employeeId?: string;
+  notificationSettings?: any;
+  appSettings?: any;
 }
 
 interface AuthContextType {
@@ -18,6 +31,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   signup: (userData: SignupData) => Promise<boolean>;
+  refreshUser: () => Promise<void>;
 }
 
 interface SignupData {
@@ -25,6 +39,7 @@ interface SignupData {
   lastName: string;
   email: string;
   password: string;
+  confirmPassword: string;
   department?: string;
   position?: string;
   phone?: string;
@@ -38,13 +53,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Check for existing session on mount
   useEffect(() => {
-    const checkAuth = () => {
+    const checkAuth = async () => {
       const savedUser = localStorage.getItem("rushcorp_user");
       const token = localStorage.getItem("rushcorp_token");
-      
+
       if (savedUser && token) {
         try {
-          const userData = JSON.parse(savedUser);
+          // Start by trusting localStorage (simple for beginners)
+          const userData = JSON.parse(savedUser) as User;
           setUser(userData);
         } catch (error) {
           console.error("Error parsing saved user data:", error);
@@ -60,73 +76,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
-    
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Hardcoded admin credentials
-      const ADMIN_EMAIL = "admin@rushcorp.com";
-      const ADMIN_PASSWORD = "Admin@123";
-      
-      let mockUser: User;
-      
-      // Check if admin login
-      if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-        mockUser = {
-          id: "admin_001",
-          email: ADMIN_EMAIL,
-          firstName: "Admin",
-          lastName: "User",
-          department: "Administration",
-          position: "System Administrator",
-          role: "admin"
-        };
-      } else if (email && password) {
-        // Regular employee login
-        mockUser = {
-          id: "emp_" + Date.now(),
-          email: email,
-          firstName: "John",
-          lastName: "Doe",
-          department: "Information Technology",
-          position: "Software Engineer",
-          role: "employee"
-        };
-      } else {
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        console.error("Login failed with status:", response.status);
         setIsLoading(false);
         return false;
       }
-      
-      // Mark attendance for all logins (admin and employee)
-      const today = new Date().toISOString().split('T')[0];
-      const attendanceKey = `attendance_${mockUser.id}_${today}`;
-      const existingAttendance = localStorage.getItem(attendanceKey);
-      
-      if (!existingAttendance) {
-        const attendanceRecord = {
-          userId: mockUser.id,
-          userName: `${mockUser.firstName} ${mockUser.lastName}`,
-          date: today,
-          checkIn: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-          status: 'present',
-          timestamp: Date.now()
-        };
-        localStorage.setItem(attendanceKey, JSON.stringify(attendanceRecord));
-        localStorage.setItem('last_attendance', JSON.stringify(attendanceRecord));
-      } else {
-        // Update last_attendance even if already checked in today
-        const existingRecord = JSON.parse(existingAttendance);
-        localStorage.setItem('last_attendance', JSON.stringify(existingRecord));
+
+      const json = await response.json();
+      const apiUser = json.data?.user;
+      const accessToken = json.data?.accessToken as string | undefined;
+
+      if (!apiUser || !accessToken) {
+        console.error("Unexpected login response shape:", json);
+        setIsLoading(false);
+        return false;
       }
-      
-      const mockToken = "mock_jwt_token_" + Date.now();
-      
-      // Save to localStorage
-      localStorage.setItem("rushcorp_user", JSON.stringify(mockUser));
-      localStorage.setItem("rushcorp_token", mockToken);
-      
-      setUser(mockUser);
+
+      // Map backend user (ADMIN/MANAGER/EMPLOYEE) to frontend roles (admin/employee)
+      const mappedUser: User = {
+        id: apiUser.id,
+        email: apiUser.email,
+        firstName: apiUser.firstName,
+        lastName: apiUser.lastName,
+        department: apiUser.department ?? undefined,
+        position: apiUser.position ?? undefined,
+        role: apiUser.role === "ADMIN" ? "admin" : "employee",
+        phone: apiUser.phone ?? undefined,
+        bio: apiUser.bio ?? undefined,
+        location: apiUser.location ?? undefined,
+        timezone: apiUser.timezone ?? undefined,
+        startDate: apiUser.startDate ?? undefined,
+        employeeId: apiUser.employeeId ?? undefined,
+        notificationSettings: apiUser.notificationSettings ?? undefined,
+        appSettings: apiUser.appSettings ?? undefined,
+      };
+
+      // Persist session in localStorage
+      localStorage.setItem("rushcorp_user", JSON.stringify(mappedUser));
+      localStorage.setItem("rushcorp_token", accessToken);
+
+      setUser(mappedUser);
       setIsLoading(false);
       return true;
     } catch (error) {
@@ -138,40 +137,112 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = async (userData: SignupData): Promise<boolean> => {
     setIsLoading(true);
-    
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Mock successful signup
-      if (userData.email && userData.password && userData.firstName && userData.lastName) {
-        const mockUser: User = {
-          id: "emp_" + Date.now(),
-          email: userData.email,
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           firstName: userData.firstName,
           lastName: userData.lastName,
+          email: userData.email,
+          password: userData.password,
+          confirmPassword: userData.confirmPassword,
           department: userData.department,
           position: userData.position,
-          role: "employee"
-        };
-        
-        const mockToken = "mock_jwt_token_" + Date.now();
-        
-        // Save to localStorage
-        localStorage.setItem("rushcorp_user", JSON.stringify(mockUser));
-        localStorage.setItem("rushcorp_token", mockToken);
-        
-        setUser(mockUser);
+          phone: userData.phone,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Signup failed with status:", response.status);
         setIsLoading(false);
-        return true;
+        return false;
       }
-      
+
+      const json = await response.json();
+      const apiUser = json.data?.user;
+      const accessToken = json.data?.accessToken as string | undefined;
+
+      if (!apiUser || !accessToken) {
+        console.error("Unexpected signup response shape:", json);
+        setIsLoading(false);
+        return false;
+      }
+
+      const mappedUser: User = {
+        id: apiUser.id,
+        email: apiUser.email,
+        firstName: apiUser.firstName,
+        lastName: apiUser.lastName,
+        department: apiUser.department ?? undefined,
+        position: apiUser.position ?? undefined,
+        role: apiUser.role === "ADMIN" ? "admin" : "employee",
+        phone: apiUser.phone ?? undefined,
+        bio: apiUser.bio ?? undefined,
+        location: apiUser.location ?? undefined,
+        timezone: apiUser.timezone ?? undefined,
+        startDate: apiUser.startDate ?? undefined,
+        employeeId: apiUser.employeeId ?? undefined,
+        notificationSettings: apiUser.notificationSettings ?? undefined,
+        appSettings: apiUser.appSettings ?? undefined,
+      };
+
+      localStorage.setItem("rushcorp_user", JSON.stringify(mappedUser));
+      localStorage.setItem("rushcorp_token", accessToken);
+
+      setUser(mappedUser);
       setIsLoading(false);
-      return false;
+      return true;
     } catch (error) {
       console.error("Signup error:", error);
       setIsLoading(false);
       return false;
+    }
+  };
+
+  const refreshUser = async () => {
+    try {
+      const token = localStorage.getItem("rushcorp_token");
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const json = await response.json();
+        const apiUser = json.data?.user;
+
+        if (apiUser) {
+          const mappedUser: User = {
+            id: apiUser.id,
+            email: apiUser.email,
+            firstName: apiUser.firstName,
+            lastName: apiUser.lastName,
+            department: apiUser.department ?? undefined,
+            position: apiUser.position ?? undefined,
+            role: apiUser.role === "ADMIN" ? "admin" : "employee",
+            phone: apiUser.phone ?? undefined,
+            bio: apiUser.bio ?? undefined,
+            location: apiUser.location ?? undefined,
+            timezone: apiUser.timezone ?? undefined,
+            startDate: apiUser.startDate ?? undefined,
+            employeeId: apiUser.employeeId ?? undefined,
+            notificationSettings: apiUser.notificationSettings ?? undefined,
+            appSettings: apiUser.appSettings ?? undefined,
+          };
+
+          localStorage.setItem("rushcorp_user", JSON.stringify(mappedUser));
+          setUser(mappedUser);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to refresh user:", error);
     }
   };
 
@@ -187,7 +258,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     login,
     logout,
-    signup
+    signup,
+    refreshUser
   };
 
   return (

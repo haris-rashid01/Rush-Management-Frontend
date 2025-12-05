@@ -113,17 +113,17 @@ export function UserProfile() {
           <span>Account Settings</span>
         </DropdownMenuItem>
         
-        <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/privacy-security")}>
+        {/* <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/privacy-security")}>
           <Shield className="mr-2 h-4 w-4" />
           <span>Privacy & Security</span>
-        </DropdownMenuItem>
+        </DropdownMenuItem> */}
         
         <DropdownMenuSeparator />
         
-        <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/help-support")}>
+        {/* <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/help-support")}>
           <HelpCircle className="mr-2 h-4 w-4" />
           <span>Help & Support</span>
-        </DropdownMenuItem>
+        </DropdownMenuItem> */}
         
         <DropdownMenuSeparator />
         

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,32 +10,38 @@ import {
   FileText,
   Calendar,
   Bell,
-  Clock,
   CheckCircle,
-  AlertCircle,
-  TrendingUp,
   Activity,
   Sun,
   Moon,
   Coffee,
-  Briefcase,
-  MessageSquare,
-  ArrowRight,
-  Timer,
   MapPin,
   Thermometer,
   Wifi,
   Battery,
-  Zap
+  Zap,
+  ArrowRight,
+  Timer
 } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
 import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [weather, setWeather] = useState({ temp: 22, condition: "Sunny", location: "New York" });
   const [systemStatus, setSystemStatus] = useState({ wifi: 100, battery: 85, performance: 92 });
   const { showInfo } = useNotifications();
+
+  // Fetch dashboard data
+  const { data: dashboardData, isLoading } = useQuery({
+    queryKey: ["/api/dashboard"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/dashboard");
+      return res.json();
+    }
+  });
 
   // Real-time clock update
   useEffect(() => {
@@ -62,11 +67,22 @@ export default function Dashboard() {
   const greeting = currentHour < 12 ? "Good Morning" : currentHour < 17 ? "Good Afternoon" : "Good Evening";
   const greetingIcon = currentHour < 12 ? <Sun className="h-5 w-5" /> : currentHour < 17 ? <Coffee className="h-5 w-5" /> : <Moon className="h-5 w-5" />;
 
+  // Use fetched data or defaults
+  const counts = dashboardData?.counts || {};
+
   const todayStats = {
-    employees: { present: 89, total: 127, percentage: 70 },
-    leaves: { pending: 3, approved: 12, total: 15 },
-    events: { today: 2, thisWeek: 8, upcoming: 5 },
-    tasks: { completed: 24, pending: 8, overdue: 2 }
+    employees: {
+      present: counts.activeToday || 0,
+      total: counts.totalEmployees || 0,
+      percentage: counts.totalEmployees ? Math.round((counts.activeToday / counts.totalEmployees) * 100) : 0
+    },
+    leaves: {
+      pending: counts.pendingLeaves || 0,
+      approved: counts.approvedLeaves || 0,
+      total: counts.totalLeaves || 0
+    },
+    events: { today: 2, thisWeek: 8, upcoming: 5 }, // Still mock for now
+    tasks: { completed: 24, pending: 8, overdue: 2 } // Still mock for now
   };
 
   const quickActions = [
@@ -76,12 +92,13 @@ export default function Dashboard() {
     { icon: <Bell className="h-4 w-4" />, label: "Prayer Times", color: "bg-orange-500", href: "/namaz" }
   ];
 
-  const recentActivity = [
-    { icon: <CheckCircle className="h-4 w-4 text-green-500" />, text: "Leave request approved", time: "2 min ago" },
-    { icon: <MessageSquare className="h-4 w-4 text-blue-500" />, text: "New team message", time: "5 min ago" },
-    { icon: <Calendar className="h-4 w-4 text-purple-500" />, text: "Meeting reminder set", time: "10 min ago" },
-    { icon: <FileText className="h-4 w-4 text-orange-500" />, text: "Document uploaded", time: "15 min ago" }
-  ];
+  const recentActivity = dashboardData?.recentActivity?.map((activity: any) => ({
+    icon: activity.type === 'leave' ? <FileText className="h-4 w-4 text-orange-500" /> :
+      activity.type === 'document' ? <FileText className="h-4 w-4 text-blue-500" /> :
+        <CheckCircle className="h-4 w-4 text-green-500" />,
+    text: `${activity.user} ${activity.action}`,
+    time: activity.time
+  })) || [];
 
   const upcomingEvents = [
     { title: "Team Standup", time: "10:00 AM", type: "Meeting", urgent: false },
@@ -307,15 +324,19 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recentActivity.map((activity, index) => (
-              <div key={index} className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded-lg transition-colors">
-                {activity.icon}
-                <div className="flex-1">
-                  <p className="text-sm">{activity.text}</p>
+            {recentActivity.length === 0 ? (
+              <div className="text-center py-4 text-muted-foreground">No recent activity</div>
+            ) : (
+              recentActivity.map((activity: any, index: number) => (
+                <div key={index} className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded-lg transition-colors">
+                  {activity.icon}
+                  <div className="flex-1">
+                    <p className="text-sm">{activity.text}</p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{activity.time}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{activity.time}</span>
-              </div>
-            ))}
+              ))
+            )}
             <Separator />
             <Button variant="ghost" className="w-full text-sm">
               View All Activity <ArrowRight className="h-4 w-4 ml-2" />
@@ -336,10 +357,10 @@ export default function Dashboard() {
           <div className="grid grid-cols-5 gap-3">
             {prayerTimes.map((prayer, index) => (
               <div key={index} className={`text-center p-3 rounded-lg border ${prayer.next
-                  ? 'bg-primary/10 border-primary'
-                  : prayer.passed
-                    ? 'bg-green-50 border-green-200'
-                    : 'bg-muted/30'
+                ? 'bg-primary/10 border-primary'
+                : prayer.passed
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-muted/30'
                 }`}>
                 <div className={`text-lg font-bold ${prayer.next ? 'text-primary' : prayer.passed ? 'text-green-600' : 'text-muted-foreground'
                   }`}>

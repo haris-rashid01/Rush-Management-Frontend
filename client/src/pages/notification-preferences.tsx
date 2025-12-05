@@ -1,30 +1,26 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/use-auth";
+import { userService } from "@/services/userService";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Bell, 
-  Mail, 
-  Smartphone, 
-  Clock, 
-  Calendar,
-  Users,
-  FileText,
-  Heart,
-  Shield,
+import {
+  Mail,
+  Smartphone,
   Volume2,
   VolumeX,
   Save,
-  Settings
+  FileText,
+  Heart,
+  Shield
 } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
 
 export default function NotificationPreferences() {
-  const { showSuccess } = useNotifications();
+  const { user, refreshUser } = useAuth();
+  const { showSuccess, showError } = useNotifications();
   const [preferences, setPreferences] = useState({
     // Email Notifications
     emailEnabled: true,
@@ -33,7 +29,7 @@ export default function NotificationPreferences() {
     emailPrayerTimes: true,
     emailSystemUpdates: false,
     emailMarketing: false,
-    
+
     // Push Notifications
     pushEnabled: true,
     pushLeaveRequests: true,
@@ -41,24 +37,33 @@ export default function NotificationPreferences() {
     pushPrayerTimes: true,
     pushSystemUpdates: true,
     pushMarketing: false,
-    
+
     // In-App Notifications
     inAppEnabled: true,
     inAppLeaveRequests: true,
     inAppMeetingReminders: true,
     inAppPrayerTimes: true,
     inAppSystemUpdates: true,
-    
+
     // Sound & Timing
     soundEnabled: true,
     quietHoursEnabled: true,
     quietHoursStart: "22:00",
     quietHoursEnd: "08:00",
-    
+
     // Frequency
     digestFrequency: "daily",
     reminderTiming: "15min"
   });
+
+  useEffect(() => {
+    if (user?.notificationSettings) {
+      setPreferences(prev => ({
+        ...prev,
+        ...user.notificationSettings
+      }));
+    }
+  }, [user]);
 
   const handleToggle = (key: string) => {
     setPreferences(prev => ({
@@ -67,24 +72,78 @@ export default function NotificationPreferences() {
     }));
   };
 
-  const handleSelectChange = (key: string, value: string) => {
-    setPreferences(prev => ({
-      ...prev,
-      [key]: value
-    }));
+  const handleSave = async () => {
+    try {
+      if (!user?.id) return;
+
+      await userService.updateUser(user.id, {
+        notificationSettings: preferences
+      });
+
+      // Handle Push Subscription if enabled
+      if (preferences.pushEnabled) {
+        await registerPush();
+      }
+
+      await refreshUser();
+      showSuccess("Preferences Saved", "Your notification preferences have been updated successfully.");
+    } catch (error) {
+      showError("Save Failed", "Failed to save notification preferences.");
+      console.error(error);
+    }
   };
 
-  const handleSave = () => {
-    showSuccess("Preferences Saved", "Your notification preferences have been updated successfully.");
+  const registerPush = async () => {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.log('Push notifications not supported');
+        return;
+      }
+
+      const registration = await navigator.serviceWorker.register('/sw.js');
+
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        console.log('Notification permission denied');
+        return;
+      }
+
+      const publicVapidKey = 'BCM74rthvnC60-FZP-t6Acg1Ntm8jcFPDME34jSPJo7PI2fWtGPeMrYFO1I4muPd4gC0wjYz6zvq5HVVkleFEGk'; // Match backend key
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicVapidKey)
+      });
+
+      await userService.subscribeToPush(subscription);
+      console.log('Push subscribed');
+    } catch (error) {
+      console.error('Error registering push:', error);
+    }
   };
 
-  const NotificationToggle = ({ 
-    id, 
-    label, 
-    description, 
-    icon, 
-    checked, 
-    disabled = false 
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+      .replace(/\-/g, '+')
+      .replace(/_/g, '/');
+
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  const NotificationToggle = ({
+    id,
+    label,
+    description,
+    icon,
+    checked,
+    disabled = false
   }: {
     id: string;
     label: string;
@@ -146,9 +205,9 @@ export default function NotificationPreferences() {
               icon={<Mail className="h-4 w-4 text-blue-500" />}
               checked={preferences.emailEnabled}
             />
-            
+
             <Separator />
-            
+
             <NotificationToggle
               id="emailLeaveRequests"
               label="Leave Request Updates"
@@ -157,16 +216,7 @@ export default function NotificationPreferences() {
               checked={preferences.emailLeaveRequests}
               disabled={!preferences.emailEnabled}
             />
-            
-            <NotificationToggle
-              id="emailMeetingReminders"
-              label="Meeting Reminders"
-              description="Upcoming meetings and calendar events"
-              icon={<Calendar className="h-4 w-4 text-purple-500" />}
-              checked={preferences.emailMeetingReminders}
-              disabled={!preferences.emailEnabled}
-            />
-            
+
             <NotificationToggle
               id="emailPrayerTimes"
               label="Prayer Time Reminders"
@@ -175,7 +225,7 @@ export default function NotificationPreferences() {
               checked={preferences.emailPrayerTimes}
               disabled={!preferences.emailEnabled}
             />
-            
+
             <NotificationToggle
               id="emailSystemUpdates"
               label="System Updates"
@@ -206,9 +256,9 @@ export default function NotificationPreferences() {
               icon={<Smartphone className="h-4 w-4 text-blue-500" />}
               checked={preferences.pushEnabled}
             />
-            
+
             <Separator />
-            
+
             <NotificationToggle
               id="pushLeaveRequests"
               label="Leave Request Updates"
@@ -217,16 +267,7 @@ export default function NotificationPreferences() {
               checked={preferences.pushLeaveRequests}
               disabled={!preferences.pushEnabled}
             />
-            
-            <NotificationToggle
-              id="pushMeetingReminders"
-              label="Meeting Reminders"
-              description="Timely meeting notifications"
-              icon={<Calendar className="h-4 w-4 text-purple-500" />}
-              checked={preferences.pushMeetingReminders}
-              disabled={!preferences.pushEnabled}
-            />
-            
+
             <NotificationToggle
               id="pushPrayerTimes"
               label="Prayer Time Alerts"
@@ -235,7 +276,7 @@ export default function NotificationPreferences() {
               checked={preferences.pushPrayerTimes}
               disabled={!preferences.pushEnabled}
             />
-            
+
             <NotificationToggle
               id="pushSystemUpdates"
               label="System Alerts"
@@ -266,143 +307,6 @@ export default function NotificationPreferences() {
               icon={preferences.soundEnabled ? <Volume2 className="h-4 w-4 text-blue-500" /> : <VolumeX className="h-4 w-4 text-gray-500" />}
               checked={preferences.soundEnabled}
             />
-            
-            <Separator />
-            
-            <div className="space-y-4">
-              <NotificationToggle
-                id="quietHoursEnabled"
-                label="Quiet Hours"
-                description="Disable notifications during specified hours"
-                icon={<Clock className="h-4 w-4 text-indigo-500" />}
-                checked={preferences.quietHoursEnabled}
-              />
-              
-              {preferences.quietHoursEnabled && (
-                <div className="grid grid-cols-2 gap-4 pl-7">
-                  <div className="space-y-2">
-                    <Label htmlFor="quietHoursStart" className="text-sm">Start Time</Label>
-                    <Select
-                      value={preferences.quietHoursStart}
-                      onValueChange={(value) => handleSelectChange("quietHoursStart", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 24 }, (_, i) => {
-                          const hour = i.toString().padStart(2, '0');
-                          return (
-                            <SelectItem key={`${hour}:00`} value={`${hour}:00`}>
-                              {hour}:00
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quietHoursEnd" className="text-sm">End Time</Label>
-                    <Select
-                      value={preferences.quietHoursEnd}
-                      onValueChange={(value) => handleSelectChange("quietHoursEnd", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 24 }, (_, i) => {
-                          const hour = i.toString().padStart(2, '0');
-                          return (
-                            <SelectItem key={`${hour}:00`} value={`${hour}:00`}>
-                              {hour}:00
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Frequency & Digest Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              Frequency & Digest
-            </CardTitle>
-            <CardDescription>
-              Control notification frequency and digest settings
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="digestFrequency">Email Digest Frequency</Label>
-              <Select
-                value={preferences.digestFrequency}
-                onValueChange={(value) => handleSelectChange("digestFrequency", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="realtime">Real-time</SelectItem>
-                  <SelectItem value="hourly">Hourly</SelectItem>
-                  <SelectItem value="daily">Daily</SelectItem>
-                  <SelectItem value="weekly">Weekly</SelectItem>
-                  <SelectItem value="never">Never</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                How often you receive email summaries of notifications
-              </p>
-            </div>
-            
-            <Separator />
-            
-            <div className="space-y-2">
-              <Label htmlFor="reminderTiming">Meeting Reminder Timing</Label>
-              <Select
-                value={preferences.reminderTiming}
-                onValueChange={(value) => handleSelectChange("reminderTiming", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5min">5 minutes before</SelectItem>
-                  <SelectItem value="15min">15 minutes before</SelectItem>
-                  <SelectItem value="30min">30 minutes before</SelectItem>
-                  <SelectItem value="1hour">1 hour before</SelectItem>
-                  <SelectItem value="1day">1 day before</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                When to send meeting reminders
-              </p>
-            </div>
-            
-            <div className="p-4 bg-muted/30 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <Bell className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">Current Status</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant={preferences.emailEnabled ? "default" : "secondary"}>
-                  Email: {preferences.emailEnabled ? "On" : "Off"}
-                </Badge>
-                <Badge variant={preferences.pushEnabled ? "default" : "secondary"}>
-                  Push: {preferences.pushEnabled ? "On" : "Off"}
-                </Badge>
-                <Badge variant={preferences.soundEnabled ? "default" : "secondary"}>
-                  Sound: {preferences.soundEnabled ? "On" : "Off"}
-                </Badge>
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>

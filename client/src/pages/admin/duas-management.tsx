@@ -1,98 +1,116 @@
-import React, { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Heart, Plus, Edit, Trash2, Search, Eye, Volume2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Heart, Plus, Trash2, Search, Eye, Volume2 } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
+// Import all API functions
+import { getDuas, addDua, deleteDua, DuaData } from "@/api/dua";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function AdminDuasManagement() {
-  const { showSuccess } = useNotifications();
+  const { showSuccess, showError } = useNotifications();
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [duas, setDuas] = useState<DuaData[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const mockDuas = [
-    {
-      id: 1,
-      title: "Morning Dua",
-      arabic: "أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ",
-      transliteration: "Asbahna wa asbahal mulku lillah",
-      translation: "We have entered the morning and the dominion belongs to Allah",
-      category: "Morning",
-      views: 456,
-      favorites: 89,
-      status: "active"
-    },
-    {
-      id: 2,
-      title: "Evening Dua",
-      arabic: "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ",
-      transliteration: "Amsayna wa amsal mulku lillah",
-      translation: "We have entered the evening and the dominion belongs to Allah",
-      category: "Evening",
-      views: 398,
-      favorites: 76,
-      status: "active"
-    },
-    {
-      id: 3,
-      title: "Before Eating",
-      arabic: "بِسْمِ اللَّهِ",
-      transliteration: "Bismillah",
-      translation: "In the name of Allah",
-      category: "Daily",
-      views: 523,
-      favorites: 112,
-      status: "active"
-    },
-    {
-      id: 4,
-      title: "After Eating",
-      arabic: "الْحَمْدُ لِلَّهِ الَّذِي أَطْعَمَنَا",
-      transliteration: "Alhamdulillahil-ladhi at'amana",
-      translation: "Praise be to Allah who has fed us",
-      category: "Daily",
-      views: 445,
-      favorites: 95,
-      status: "active"
-    },
-    {
-      id: 5,
-      title: "Before Sleep",
-      arabic: "بِاسْمِكَ اللَّهُمَّ أَمُوتُ وَأَحْيَا",
-      transliteration: "Bismika Allahumma amutu wa ahya",
-      translation: "In Your name O Allah, I die and I live",
-      category: "Night",
-      views: 367,
-      favorites: 82,
-      status: "active"
-    }
-  ];
+  // Delete dialog state
+  const [deleteId, setDeleteId] = useState<string | number | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const categories = ["Morning", "Evening", "Daily", "Night", "Travel", "Special Occasions"];
+  const [newDua, setNewDua] = useState<DuaData>({
+    title: "",
+    arabic: "",
+    transliteration: "",
+    translation: "",
+    category: "",
+    audioUrl: ""
+  });
 
-  const filteredDuas = mockDuas.filter(dua =>
+  // Fetch duas from API on mount
+  useEffect(() => {
+    const fetchDuas = async () => {
+      try {
+        setLoading(true);
+        const data = await getDuas();
+        setDuas(data);
+      } catch (error) {
+        console.error("Failed to fetch duas:", error);
+        showError("Error", "Failed to load duas from server.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDuas();
+  }, []);
+
+  const filteredDuas = duas.filter((dua) =>
     dua.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    dua.transliteration.toLowerCase().includes(searchQuery.toLowerCase())
+    (dua.transliteration?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  const handleAddDua = () => {
-    showSuccess("Dua Added", "New dua has been added successfully.");
-    setIsAddDialogOpen(false);
+  const handleDeleteClick = (id: string | number) => {
+    setDeleteId(id);
+    setIsDeleteDialogOpen(true);
   };
 
-  const handleDelete = (title: string) => {
-    showSuccess("Dua Deleted", `${title} has been removed.`);
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+
+    try {
+      await deleteDua(deleteId);
+      showSuccess("Dua Deleted", "Dua has been removed.");
+      setDuas((prev) => prev.filter((d) => d.id !== deleteId));
+    } catch (error) {
+      console.error("Delete failed:", error);
+      showError("Delete Failed", "Could not delete the dua.");
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setDeleteId(null);
+    }
+  };
+
+  const handlePlayAudio = (url: string) => {
+    if (!url) return;
+    const audio = new Audio(url);
+    audio.play();
+  };
+
+  const handleAddDua = async () => {
+    if (!newDua.title) {
+      showError("Validation Error", "Title is required");
+      return;
+    }
+
+    try {
+      const createdDua = await addDua(newDua);
+      setDuas((prev) => [createdDua, ...prev]); // Add new dua to top of list
+      showSuccess("Dua Added", "New dua has been added successfully.");
+      setIsAddDialogOpen(false);
+      // Reset form
+      setNewDua({ title: "", arabic: "", transliteration: "", translation: "", category: "", audioUrl: "" });
+    } catch (error) {
+      console.error("Failed to add dua:", error);
+      showError("Add Dua Failed", "Something went wrong while adding the dua.");
+    }
   };
 
   const stats = {
-    total: mockDuas.length,
-    active: mockDuas.filter(d => d.status === 'active').length,
-    totalViews: mockDuas.reduce((sum, d) => sum + d.views, 0),
-    totalFavorites: mockDuas.reduce((sum, d) => sum + d.favorites, 0)
+    total: duas.length,
+    active: duas.filter(d => d.status === 'active').length,
   };
 
   return (
@@ -106,50 +124,26 @@ export default function AdminDuasManagement() {
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Add Dua
+              <Plus className="h-4 w-4" /> Add Dua
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Add New Dua</DialogTitle>
-              <DialogDescription>Add a new dua to the collection</DialogDescription>
             </DialogHeader>
+            {/* Add Dua form */}
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="duaTitle">Title</Label>
-                <Input id="duaTitle" placeholder="e.g., Morning Dua" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <select className="w-full p-2 border border-border rounded-md bg-background">
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat.toLowerCase()}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="arabic">Arabic Text</Label>
-                <Textarea 
-                  id="arabic" 
-                  placeholder="Enter Arabic text..." 
-                  rows={3}
-                  className="text-right font-arabic text-lg"
-                  dir="rtl"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="transliteration">Transliteration</Label>
-                <Textarea id="transliteration" placeholder="Enter transliteration..." rows={2} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="translation">English Translation</Label>
-                <Textarea id="translation" placeholder="Enter English translation..." rows={3} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="audioUrl">Audio URL (Optional)</Label>
-                <Input id="audioUrl" placeholder="https://example.com/audio.mp3" />
-              </div>
+              {["title", "arabic", "transliteration", "translation", "category", "audioUrl"].map((field) => (
+                <div key={field} className="space-y-2">
+                  <Label htmlFor={field}>{field.charAt(0).toUpperCase() + field.slice(1)}</Label>
+                  <Input
+                    id={field}
+                    placeholder={`Enter ${field}...`}
+                    value={(newDua as any)[field]}
+                    onChange={(e) => setNewDua(prev => ({ ...prev, [field]: e.target.value }))}
+                  />
+                </div>
+              ))}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
@@ -161,50 +155,10 @@ export default function AdminDuasManagement() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Duas</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
-              </div>
-              <Heart className="h-8 w-8 text-red-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Active</p>
-                <p className="text-2xl font-bold text-green-600">{stats.active}</p>
-              </div>
-              <Heart className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Views</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.totalViews}</p>
-              </div>
-              <Eye className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Favorites</p>
-                <p className="text-2xl font-bold text-purple-600">{stats.totalFavorites}</p>
-              </div>
-              <Heart className="h-8 w-8 text-purple-500" />
-            </div>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Total Duas</p><p className="text-2xl font-bold">{stats.total}</p></div><Heart className="h-8 w-8 text-red-500" /></div></CardContent></Card>
+        <Card><CardContent className="p-6"><div className="flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Active</p><p className="text-2xl font-bold text-green-600">{stats.active}</p></div><Heart className="h-8 w-8 text-green-500" /></div></CardContent></Card>
+        
+      
       </div>
 
       {/* Duas List */}
@@ -212,8 +166,7 @@ export default function AdminDuasManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Heart className="h-5 w-5" />
-              All Duas
+              <Heart className="h-5 w-5" /> All Duas
             </CardTitle>
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -227,46 +180,38 @@ export default function AdminDuasManagement() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {loading && <div className="text-center py-4">Loading duas...</div>}
+
+          {!loading && filteredDuas.length === 0 && (
+            <div className="text-center py-4 text-muted-foreground">No duas found.</div>
+          )}
+
           {filteredDuas.map((dua) => (
             <div key={dua.id} className="p-4 rounded-lg border border-border/50 hover:bg-muted/30 transition-colors">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="font-semibold text-lg">{dua.title}</h3>
-                    <Badge variant="outline">{dua.category}</Badge>
-                    <Badge variant="default">{dua.status}</Badge>
+                    {dua.category && <Badge variant="outline">{dua.category}</Badge>}
+                    {dua.status && <Badge variant="default">{dua.status}</Badge>}
                   </div>
                   <div className="space-y-2">
-                    <div className="p-3 bg-muted/30 rounded-lg">
-                      <p className="text-right text-xl font-arabic" dir="rtl">{dua.arabic}</p>
-                    </div>
-                    <p className="text-sm italic text-muted-foreground">{dua.transliteration}</p>
-                    <p className="text-sm">{dua.translation}</p>
-                  </div>
-                  <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Eye className="h-3 w-3" />
-                      <span>{dua.views} views</span>
-                    </div>
-                    <span>•</span>
-                    <div className="flex items-center gap-1">
-                      <Heart className="h-3 w-3" />
-                      <span>{dua.favorites} favorites</span>
-                    </div>
+                    {dua.arabic && <div className="p-3 bg-muted/30 rounded-lg"><p className="text-right text-xl font-arabic" dir="rtl">{dua.arabic}</p></div>}
+                    {dua.transliteration && <p className="text-sm italic text-muted-foreground">{dua.transliteration}</p>}
+                    {dua.translation && <p className="text-sm">{dua.translation}</p>}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm">
-                    <Volume2 className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="sm">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="outline" 
+                  {dua.audioUrl && (
+                    <Button variant="outline" size="sm" onClick={() => handlePlayAudio(dua.audioUrl!)}>
+                      <Volume2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
                     size="sm"
                     className="text-red-600 hover:text-red-700"
-                    onClick={() => handleDelete(dua.title)}
+                    onClick={() => dua.id && handleDeleteClick(dua.id)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -276,6 +221,23 @@ export default function AdminDuasManagement() {
           ))}
         </CardContent>
       </Card>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the dua.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

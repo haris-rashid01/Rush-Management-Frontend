@@ -7,29 +7,123 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { MapPin, Clock, Bell, Volume2, CheckCircle, Timer } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
+import { prayerTimeService, PrayerSettings } from "@/services/prayerTimeService";
+import { format, differenceInMinutes, addDays, isAfter, isBefore, parse } from "date-fns";
 
 export default function Namaz() {
+  const { showSuccess, showInfo, showError } = useNotifications();
   const [location, setLocation] = useState("New York");
-  const [prayerTimes, setPrayerTimes] = useState([
-    { name: "Fajr", time: "5:30 AM", countdown: "Completed", passed: true, alarmEnabled: true },
-    { name: "Dhuhr", time: "12:45 PM", countdown: "In 2h 30m", passed: false, alarmEnabled: true, isNext: true },
-    { name: "Asr", time: "3:15 PM", countdown: "In 5h", passed: false, alarmEnabled: false },
-    { name: "Maghrib", time: "5:42 PM", countdown: "In 7h 27m", passed: false, alarmEnabled: true },
-    { name: "Isha", time: "7:05 PM", countdown: "In 8h 50m", passed: false, alarmEnabled: false },
-  ]);
-  
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  
-  const { showSuccess, showInfo } = useNotifications();
+  const [settings, setSettings] = useState<PrayerSettings | null>(null);
+  const [prayerTimes, setPrayerTimes] = useState<any[]>([]);
+  const [nextPrayer, setNextPrayer] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    fetchSettings();
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (settings) {
+      fetchPrayerTimes();
+    }
+  }, [settings, currentTime]); // Re-calculate when settings or time changes
+
+  const fetchSettings = async () => {
+    try {
+      const data = await prayerTimeService.getSettings();
+      setSettings(data);
+      setLocation(data.location);
+    } catch (error) {
+      console.error(error);
+      showError("Error", "Failed to load prayer settings");
+    }
+  };
+
+  const fetchPrayerTimes = async () => {
+    if (!settings) return;
+
+    try {
+      const date = new Date();
+      const timestamp = Math.floor(date.getTime() / 1000);
+      const response = await fetch(
+        `https://api.aladhan.com/v1/timings/${timestamp}?latitude=${settings.latitude}&longitude=${settings.longitude}&method=${settings.calculationMethod}`
+      );
+      const data = await response.json();
+
+      if (data.code === 200) {
+        const timings = data.data.timings;
+        const prayers = [
+          { name: "Fajr", time: timings.Fajr, adjustment: settings.adjustments.fajr },
+          { name: "Dhuhr", time: timings.Dhuhr, adjustment: settings.adjustments.dhuhr },
+          { name: "Asr", time: timings.Asr, adjustment: settings.adjustments.asr },
+          { name: "Maghrib", time: timings.Maghrib, adjustment: settings.adjustments.maghrib },
+          { name: "Isha", time: timings.Isha, adjustment: settings.adjustments.isha }
+        ];
+
+        const processedPrayers = prayers.map(p => {
+          // Parse time string (HH:mm) to Date object for today
+          const [hours, minutes] = p.time.split(':').map(Number);
+          const prayerDate = new Date();
+          prayerDate.setHours(hours, minutes + p.adjustment, 0, 0);
+
+          const isPassed = isAfter(currentTime, prayerDate);
+
+          return {
+            ...p,
+            date: prayerDate,
+            displayTime: format(prayerDate, settings.display.use24HourFormat ? "HH:mm" : "h:mm a"),
+            passed: isPassed,
+            alarmEnabled: settings.notifications.enabled
+          };
+        });
+
+        setPrayerTimes(processedPrayers);
+
+        // Find next prayer
+        const next = processedPrayers.find(p => !p.passed);
+        if (next) {
+          const diff = differenceInMinutes(next.date, currentTime);
+          const hours = Math.floor(diff / 60);
+          const mins = diff % 60;
+          setNextPrayer({
+            ...next,
+            countdown: `In ${hours > 0 ? `${hours}h ` : ''}${mins}m`
+          });
+        } else {
+          // Next prayer is Fajr tomorrow
+          const fajr = processedPrayers.find(p => p.name === "Fajr");
+          if (fajr) {
+            const tomorrowFajr = addDays(fajr.date, 1);
+            const diff = differenceInMinutes(tomorrowFajr, currentTime);
+            const hours = Math.floor(diff / 60);
+            const mins = diff % 60;
+            setNextPrayer({
+              ...fajr,
+              date: tomorrowFajr,
+              displayTime: format(tomorrowFajr, settings.display.use24HourFormat ? "HH:mm" : "h:mm a"),
+              countdown: `In ${hours > 0 ? `${hours}h ` : ''}${mins}m`
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch prayer times", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const togglePrayerAlarm = (prayerName: string) => {
-    setPrayerTimes(prev => prev.map(prayer => 
-      prayer.name === prayerName 
+    // Local toggle for UI only, doesn't persist to backend per-prayer yet
+    setPrayerTimes(prev => prev.map(prayer =>
+      prayer.name === prayerName
         ? { ...prayer, alarmEnabled: !prayer.alarmEnabled }
         : prayer
     ));
-    
+
     const prayer = prayerTimes.find(p => p.name === prayerName);
     if (prayer?.alarmEnabled) {
       showInfo('Alarm Disabled', `${prayerName} alarm turned off`);
@@ -38,18 +132,11 @@ export default function Namaz() {
     }
   };
 
-  const enableAllAlarms = () => {
-    setPrayerTimes(prev => prev.map(prayer => ({ ...prayer, alarmEnabled: true })));
-    showSuccess('All Alarms On', 'Prayer alarms enabled for all prayers');
-  };
-
-  const disableAllAlarms = () => {
-    setPrayerTimes(prev => prev.map(prayer => ({ ...prayer, alarmEnabled: false })));
-    showInfo('All Alarms Off', 'All prayer alarms disabled');
-  };
-
-  const nextPrayer = prayerTimes.find(prayer => prayer.isNext);
   const enabledAlarms = prayerTimes.filter(prayer => prayer.alarmEnabled).length;
+
+  if (isLoading) {
+    return <div className="text-center py-10">Loading prayer times...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -65,31 +152,33 @@ export default function Namaz() {
       </div>
 
       {/* Next Prayer */}
-      <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 border-green-200 dark:border-green-800">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
-                <Timer className="h-6 w-6 text-green-600 dark:text-green-400 animate-pulse" />
+      {nextPrayer && (
+        <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 border-green-200 dark:border-green-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                  <Timer className="h-6 w-6 text-green-600 dark:text-green-400 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-green-800 dark:text-green-200">
+                    Next: {nextPrayer.name}
+                  </h3>
+                  <p className="text-sm text-green-600 dark:text-green-400">
+                    {nextPrayer.displayTime} • {nextPrayer.countdown}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-green-800 dark:text-green-200">
-                  Next: {nextPrayer?.name}
-                </h3>
-                <p className="text-sm text-green-600 dark:text-green-400">
-                  {nextPrayer?.time} • {nextPrayer?.countdown}
-                </p>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                  {nextPrayer.countdown}
+                </div>
+                <div className="text-sm text-green-600 dark:text-green-400">remaining</div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-green-700 dark:text-green-300">
-                {nextPrayer?.countdown}
-              </div>
-              <div className="text-sm text-green-600 dark:text-green-400">remaining</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Location */}
       <Card>
@@ -102,17 +191,16 @@ export default function Namaz() {
         <CardContent>
           <div className="flex gap-2">
             <Input
-              placeholder="Enter your city"
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="flex-1"
+              readOnly
+              className="flex-1 bg-muted"
             />
-            <Button onClick={() => showSuccess('Location Updated', 'Prayer times updated')}>
-              Update
+            <Button variant="outline" disabled>
+              Managed by Admin
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Prayer times will adjust based on your location
+            Prayer times are calculated based on organization settings.
           </p>
         </CardContent>
       </Card>
@@ -120,29 +208,30 @@ export default function Namaz() {
       {/* Prayer Times Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {prayerTimes.map((prayer) => (
-          <Card key={prayer.name} className={`text-center ${
-            prayer.isNext 
-              ? 'bg-primary/10 dark:bg-primary/20 border-primary' 
-              : prayer.passed 
-                ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800' 
-                : ''
-          }`}>
+          <Card key={prayer.name} className={`text-center ${nextPrayer?.name === prayer.name
+            ? 'bg-primary/10 dark:bg-primary/20 border-primary'
+            : prayer.passed
+              ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
+              : ''
+            }`}>
             <CardContent className="p-4">
               <div className="space-y-3">
                 <div>
                   <h3 className="font-semibold text-lg">{prayer.name}</h3>
-                  <p className="text-2xl font-bold text-primary">{prayer.time}</p>
-                  <p className="text-sm text-muted-foreground">{prayer.countdown}</p>
+                  <p className="text-2xl font-bold text-primary">{prayer.displayTime}</p>
+                  {nextPrayer?.name === prayer.name && (
+                    <p className="text-sm text-muted-foreground">{prayer.countdown}</p>
+                  )}
                 </div>
-                
+
                 {prayer.passed && (
                   <CheckCircle className="h-6 w-6 text-green-500 dark:text-green-400 mx-auto" />
                 )}
-                
-                {prayer.isNext && (
+
+                {nextPrayer?.name === prayer.name && (
                   <Timer className="h-6 w-6 text-primary mx-auto animate-pulse" />
                 )}
-                
+
                 <div className="flex items-center justify-center gap-2">
                   <Bell className={`h-4 w-4 ${prayer.alarmEnabled ? 'text-green-500' : 'text-muted-foreground'}`} />
                   <Switch
@@ -151,7 +240,7 @@ export default function Namaz() {
                     size="sm"
                   />
                 </div>
-                
+
                 <p className="text-xs text-muted-foreground">
                   {prayer.alarmEnabled ? 'Alarm On' : 'Alarm Off'}
                 </p>
@@ -161,49 +250,7 @@ export default function Namaz() {
         ))}
       </div>
 
-      {/* Quick Controls */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Quick Controls</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2 flex-wrap">
-            <Button onClick={enableAllAlarms} className="bg-green-600 hover:bg-green-700">
-              <Bell className="h-4 w-4 mr-2" />
-              Enable All Alarms
-            </Button>
-            <Button onClick={disableAllAlarms} variant="outline">
-              Turn Off All Alarms
-            </Button>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="font-medium">Sound Notifications</Label>
-                <p className="text-sm text-muted-foreground">Play Adhan sound</p>
-              </div>
-              <Switch
-                checked={soundEnabled}
-                onCheckedChange={setSoundEnabled}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="font-medium">Push Notifications</Label>
-                <p className="text-sm text-muted-foreground">Show alerts</p>
-              </div>
-              <Switch
-                checked={notificationsEnabled}
-                onCheckedChange={setNotificationsEnabled}
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Simple Qibla Direction */}
+      {/* Qibla Direction */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Qibla Direction</CardTitle>
@@ -211,8 +258,12 @@ export default function Namaz() {
         <CardContent className="text-center">
           <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/20 dark:to-blue-900/20 border-4 border-green-200 dark:border-green-800 mb-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-green-700 dark:text-green-300">45°</div>
-              <div className="text-sm text-green-600 dark:text-green-400">NE</div>
+              {/* This is a placeholder calculation. Real Qibla calculation requires complex math */}
+              <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                {/* Simple approximation or just static for now as Qibla API is separate */}
+                Unknown
+              </div>
+              <div className="text-sm text-green-600 dark:text-green-400">Direction</div>
             </div>
           </div>
           <p className="text-sm text-muted-foreground">

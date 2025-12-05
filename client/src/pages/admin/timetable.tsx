@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,68 +8,119 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Calendar, Plus, Edit, Trash2, Clock, Users, Download } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
+import { timetableService, WorkSchedule } from "@/services/timetableService";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function AdminTimetable() {
-  const { showSuccess } = useNotifications();
+  const { showSuccess, showError } = useNotifications();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const mockSchedules = [
-    {
-      id: 1,
-      department: "Information Technology",
-      shift: "Morning Shift",
-      startTime: "09:00 AM",
-      endTime: "05:00 PM",
-      workDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-      employees: 35,
-      breakTime: "1 hour",
-      status: "active"
-    },
-    {
-      id: 2,
-      department: "Operations",
-      shift: "Day Shift",
-      startTime: "08:00 AM",
-      endTime: "04:00 PM",
-      workDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-      employees: 42,
-      breakTime: "1 hour",
-      status: "active"
-    },
-    {
-      id: 3,
-      department: "Customer Service",
-      shift: "Evening Shift",
-      startTime: "02:00 PM",
-      endTime: "10:00 PM",
-      workDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
-      employees: 18,
-      breakTime: "30 minutes",
-      status: "active"
-    },
-    {
-      id: 4,
-      department: "Security",
-      shift: "Night Shift",
-      startTime: "10:00 PM",
-      endTime: "06:00 AM",
-      workDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-      employees: 12,
-      breakTime: "1 hour",
-      status: "active"
-    }
-  ];
+  // Delete dialog state
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const handleAddSchedule = () => {
-    showSuccess("Schedule Created", "New work schedule has been created successfully.");
-    setIsAddDialogOpen(false);
-  };
-
-  const handleDelete = (dept: string) => {
-    showSuccess("Schedule Deleted", `Schedule for ${dept} has been removed.`);
-  };
+  // Form State
+  const [formData, setFormData] = useState({
+    department: "",
+    shift: "",
+    startTime: "",
+    endTime: "",
+    breakTime: "",
+    workDays: [] as string[]
+  });
 
   const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+  // Load schedules from backend
+  const fetchSchedules = async () => {
+    try {
+      setIsLoading(true);
+      const data = await timetableService.getSchedules();
+      setSchedules(data);
+    } catch (err) {
+      console.error("Failed to load schedules", err);
+      showError("Error", "Failed to load schedules");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSchedules();
+  }, []);
+
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleDayToggle = (day: string) => {
+    setFormData(prev => {
+      const currentDays = prev.workDays;
+      if (currentDays.includes(day)) {
+        return { ...prev, workDays: currentDays.filter(d => d !== day) };
+      } else {
+        return { ...prev, workDays: [...currentDays, day] };
+      }
+    });
+  };
+
+  const handleAddSchedule = async () => {
+    try {
+      if (!formData.department || !formData.shift || !formData.startTime || !formData.endTime) {
+        showError("Validation Error", "Please fill in all required fields");
+        return;
+      }
+
+      await timetableService.createSchedule(formData);
+      showSuccess("Schedule Created", "New work schedule has been created.");
+      setIsAddDialogOpen(false);
+      fetchSchedules();
+      // Reset form
+      setFormData({
+        department: "",
+        shift: "",
+        startTime: "",
+        endTime: "",
+        breakTime: "",
+        workDays: []
+      });
+    } catch (error) {
+      console.error(error);
+      showError("Error", "Failed to create schedule");
+    }
+  };
+
+  const handleDeleteClick = (id: number) => {
+    setDeleteId(id);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+
+    try {
+      await timetableService.deleteSchedule(deleteId);
+      setSchedules((prev) => prev.filter((s) => s.id !== deleteId));
+      showSuccess("Schedule Deleted", "Schedule has been removed.");
+    } catch (err) {
+      console.error("Delete schedule error", err);
+      showError("Delete Failed", "An error occurred while deleting the schedule");
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setDeleteId(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -80,10 +131,6 @@ export default function AdminTimetable() {
           <p className="text-muted-foreground">Manage employee work schedules and shifts</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="flex items-center gap-2">
@@ -100,45 +147,62 @@ export default function AdminTimetable() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="department">Department</Label>
-                    <Select>
+                    <Select onValueChange={(val) => handleInputChange("department", val)}>
                       <SelectTrigger>
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="it">Information Technology</SelectItem>
-                        <SelectItem value="hr">Human Resources</SelectItem>
-                        <SelectItem value="finance">Finance</SelectItem>
-                        <SelectItem value="operations">Operations</SelectItem>
-                        <SelectItem value="marketing">Marketing</SelectItem>
+                        <SelectItem value="Information Technology">Information Technology</SelectItem>
+                        <SelectItem value="Human Resources">Human Resources</SelectItem>
+                        <SelectItem value="Finance">Finance</SelectItem>
+                        <SelectItem value="Operations">Operations</SelectItem>
+                        <SelectItem value="Marketing">Marketing</SelectItem>
+                        <SelectItem value="Sales">Sales</SelectItem>
+                        <SelectItem value="Customer Service">Customer Service</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="shiftName">Shift Name</Label>
-                    <Input id="shiftName" placeholder="e.g., Morning Shift" />
+                    <Input
+                      id="shiftName"
+                      placeholder="e.g., Morning Shift"
+                      value={formData.shift}
+                      onChange={(e) => handleInputChange("shift", e.target.value)}
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="startTime">Start Time</Label>
-                    <Input id="startTime" type="time" />
+                    <Input
+                      id="startTime"
+                      type="time"
+                      value={formData.startTime}
+                      onChange={(e) => handleInputChange("startTime", e.target.value)}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="endTime">End Time</Label>
-                    <Input id="endTime" type="time" />
+                    <Input
+                      id="endTime"
+                      type="time"
+                      value={formData.endTime}
+                      onChange={(e) => handleInputChange("endTime", e.target.value)}
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="breakTime">Break Duration</Label>
-                  <Select>
+                  <Select onValueChange={(val) => handleInputChange("breakTime", val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select break duration" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="30">30 minutes</SelectItem>
-                      <SelectItem value="45">45 minutes</SelectItem>
-                      <SelectItem value="60">1 hour</SelectItem>
-                      <SelectItem value="90">1.5 hours</SelectItem>
+                      <SelectItem value="30 minutes">30 minutes</SelectItem>
+                      <SelectItem value="45 minutes">45 minutes</SelectItem>
+                      <SelectItem value="1 hour">1 hour</SelectItem>
+                      <SelectItem value="1.5 hours">1.5 hours</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -147,7 +211,12 @@ export default function AdminTimetable() {
                   <div className="grid grid-cols-4 gap-2">
                     {weekDays.map((day) => (
                       <label key={day} className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" className="rounded border-border" defaultChecked={day !== 'Saturday' && day !== 'Sunday'} />
+                        <input
+                          type="checkbox"
+                          className="rounded border-border"
+                          checked={formData.workDays.includes(day)}
+                          onChange={() => handleDayToggle(day)}
+                        />
                         <span className="text-sm">{day.slice(0, 3)}</span>
                       </label>
                     ))}
@@ -170,7 +239,7 @@ export default function AdminTimetable() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Schedules</p>
-                <p className="text-2xl font-bold">{mockSchedules.length}</p>
+                <p className="text-2xl font-bold">{schedules.length}</p>
               </div>
               <Calendar className="h-8 w-8 text-blue-500" />
             </div>
@@ -181,7 +250,9 @@ export default function AdminTimetable() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Active Shifts</p>
-                <p className="text-2xl font-bold text-green-600">{mockSchedules.length}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {schedules.filter((s) => s.status === "active").length}
+                </p>
               </div>
               <Clock className="h-8 w-8 text-green-500" />
             </div>
@@ -192,7 +263,7 @@ export default function AdminTimetable() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Employees</p>
-                <p className="text-2xl font-bold">{mockSchedules.reduce((sum, s) => sum + s.employees, 0)}</p>
+                <p className="text-2xl font-bold">{schedules.reduce((sum, s) => sum + s.employees, 0)}</p>
               </div>
               <Users className="h-8 w-8 text-purple-500" />
             </div>
@@ -203,7 +274,7 @@ export default function AdminTimetable() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Departments</p>
-                <p className="text-2xl font-bold">{mockSchedules.length}</p>
+                <p className="text-2xl font-bold">{new Set(schedules.map(s => s.department)).size}</p>
               </div>
               <Calendar className="h-8 w-8 text-orange-500" />
             </div>
@@ -213,65 +284,88 @@ export default function AdminTimetable() {
 
       {/* Schedules List */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {mockSchedules.map((schedule) => (
-          <Card key={schedule.id} className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <div className="flex items-start justify-between">
+        {isLoading ? (
+          <div className="col-span-2 text-center py-10">Loading schedules...</div>
+        ) : schedules.length === 0 ? (
+          <div className="col-span-2 text-center py-10 text-muted-foreground">No schedules found. Create one to get started.</div>
+        ) : (
+          schedules.map((schedule) => (
+            <Card key={schedule.id} className="hover:shadow-lg transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-xl">{schedule.department}</CardTitle>
+                    <CardDescription className="flex items-center gap-2 mt-1">
+                      <Badge variant="default">{schedule.shift}</Badge>
+                      <Badge variant="secondary">{schedule.employees} employees</Badge>
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700"
+                      onClick={() => handleDeleteClick(schedule.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Start Time</p>
+                    <p className="font-medium flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      {schedule.startTime}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">End Time</p>
+                    <p className="font-medium flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      {schedule.endTime}
+                    </p>
+                  </div>
+                </div>
                 <div>
-                  <CardTitle className="text-xl">{schedule.department}</CardTitle>
-                  <CardDescription className="flex items-center gap-2 mt-1">
-                    <Badge variant="default">{schedule.shift}</Badge>
-                    <Badge variant="secondary">{schedule.employees} employees</Badge>
-                  </CardDescription>
+                  <p className="text-xs text-muted-foreground mb-2">Work Days</p>
+                  <div className="flex flex-wrap gap-2">
+                    {schedule.workDays.map((day) => (
+                      <Badge key={day} variant="outline">{day.slice(0, 3)}</Badge>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm">
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="text-red-600 hover:text-red-700"
-                    onClick={() => handleDelete(schedule.department)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm text-muted-foreground">Break Time: {schedule.breakTime}</span>
+                  <Badge variant="default">{schedule.status}</Badge>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Start Time</p>
-                  <p className="font-medium flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    {schedule.startTime}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">End Time</p>
-                  <p className="font-medium flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    {schedule.endTime}
-                  </p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-2">Work Days</p>
-                <div className="flex flex-wrap gap-2">
-                  {schedule.workDays.map((day) => (
-                    <Badge key={day} variant="outline">{day.slice(0, 3)}</Badge>
-                  ))}
-                </div>
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t">
-                <span className="text-sm text-muted-foreground">Break Time: {schedule.breakTime}</span>
-                <Badge variant="default">{schedule.status}</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the schedule.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
