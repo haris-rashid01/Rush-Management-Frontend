@@ -4,11 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { 
-  Bell, 
-  Clock, 
-  Star, 
-  RefreshCw, 
+import {
+  Bell,
+  Clock,
+  Star,
+  RefreshCw,
   Settings,
   Volume2,
   Heart
@@ -17,21 +17,39 @@ import { duasData } from '@/data/duas';
 import { useNotifications } from '@/hooks/use-notifications';
 import { useDuaFavorites } from '@/hooks/use-dua-favorites';
 
-export function DailyDuaReminder() {
-  const [currentDua, setCurrentDua] = useState(duasData[0]);
+interface DailyDuaReminderProps {
+  dua?: any;
+  stats?: {
+    total: number;
+    favorites: number;
+    categories: number;
+  };
+}
+
+export function DailyDuaReminder({ dua, stats }: DailyDuaReminderProps) {
+  const [currentDua, setCurrentDua] = useState(dua || duasData[0]);
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState('09:00');
   const [showFullDua, setShowFullDua] = useState(false);
   const { showSuccess, showInfo } = useNotifications();
   const { toggleFavorite, isFavorite } = useDuaFavorites();
 
-  // Get daily dua based on current date
+  const totalCount = stats?.total ?? duasData.length;
+  // Fallback to static data logic if stats not provided, or simplify
+  const categoriesCount = stats?.categories ?? new Set(duasData.map(d => d.category)).size;
+
+  // If new prop comes in, update state
   useEffect(() => {
-    const today = new Date();
-    const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
-    const duaIndex = dayOfYear % duasData.length;
-    setCurrentDua(duasData[duaIndex]);
-  }, []);
+    if (dua) {
+      setCurrentDua(dua);
+    } else {
+      // Fallback or previously existing logic
+      const today = new Date();
+      const dayOfYear = Math.floor((today.getTime() - new Date(today.getFullYear(), 0, 0).getTime()) / 86400000);
+      const duaIndex = dayOfYear % duasData.length;
+      setCurrentDua(duasData[duaIndex]);
+    }
+  }, [dua]);
 
   // Load reminder settings
   useEffect(() => {
@@ -93,7 +111,7 @@ export function DailyDuaReminder() {
             </CardDescription>
           </div>
           <Badge variant="outline" className="text-xs">
-            {new Date().toLocaleDateString('en-US', { 
+            {new Date().toLocaleDateString('en-US', {
               weekday: 'long',
               month: 'short',
               day: 'numeric'
@@ -124,9 +142,9 @@ export function DailyDuaReminder() {
 
           <div className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/50 dark:to-blue-950/50 p-4 rounded-lg border">
             <p className="text-xl font-amiri leading-relaxed text-green-800 dark:text-green-200 text-right" dir="rtl">
-              {showFullDua ? currentDua.arabic : 
-                currentDua.arabic.length > 100 ? 
-                  `${currentDua.arabic.substring(0, 100)}...` : 
+              {showFullDua ? currentDua.arabic :
+                currentDua.arabic.length > 100 ?
+                  `${currentDua.arabic.substring(0, 100)}...` :
                   currentDua.arabic
               }
             </p>
@@ -166,12 +184,7 @@ export function DailyDuaReminder() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Next Dua
           </Button>
-          {currentDua.hasAudio && (
-            <Button variant="outline" className="flex-1">
-              <Volume2 className="h-4 w-4 mr-2" />
-              Play Audio
-            </Button>
-          )}
+
         </div>
 
         {/* Reminder Settings */}
@@ -209,20 +222,14 @@ export function DailyDuaReminder() {
 
         {/* Quick Stats */}
         <div className="bg-muted/20 p-3 rounded-lg">
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="grid grid-cols-2 gap-4 text-center">
             <div>
-              <div className="text-lg font-bold text-primary">{duasData.length}</div>
+              <div className="text-lg font-bold text-primary">{totalCount}</div>
               <div className="text-xs text-muted-foreground">Total Duas</div>
             </div>
             <div>
-              <div className="text-lg font-bold text-green-600">
-                {duasData.filter(d => d.hasAudio).length}
-              </div>
-              <div className="text-xs text-muted-foreground">With Audio</div>
-            </div>
-            <div>
               <div className="text-lg font-bold text-blue-600">
-                {new Set(duasData.map(d => d.category)).size}
+                {categoriesCount}
               </div>
               <div className="text-xs text-muted-foreground">Categories</div>
             </div>

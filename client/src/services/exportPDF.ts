@@ -1,41 +1,24 @@
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
-export const exportPDF = () => {
+export const exportPDF = (
+  title: string,
+  columns: string[],
+  data: any[][],
+  filename: string
+) => {
   const doc = new jsPDF();
 
   doc.setFontSize(18);
-  doc.text("Leave Requests Report", 14, 20);
-
-  const tableColumn = [
-    "Employee",
-    "Leave Type",
-    "Start Date",
-    "End Date",
-    "Days",
-    "Reason",
-    "Status"
-  ];
-
-  const tableRows: any[] = [];
-
-  requests.forEach((req) => {
-    tableRows.push([
-      req.employee,
-      req.type,
-      req.startDate,
-      req.endDate,
-      req.days,
-      req.reason || "N/A",
-      req.status,
-    ]);
-  });
+  doc.text(title, 14, 20);
 
   (doc as any).autoTable({
-    head: [tableColumn],
-    body: tableRows,
+    head: [columns],
+    body: data,
     startY: 30,
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [33, 150, 243] },
   });
 
-  doc.save("Leave_Requests_Report.pdf");
+  doc.save(filename);
 };

@@ -105,9 +105,6 @@ export default function Announcements() {
                         </CardHeader>
                         <CardContent className="space-y-2">
                             <Button variant="ghost" className="w-full justify-start text-sm">All Announcements</Button>
-                            <Button variant="ghost" className="w-full justify-start text-sm">Urgent Notices</Button>
-                            <Button variant="ghost" className="w-full justify-start text-sm">Events</Button>
-                            <Button variant="ghost" className="w-full justify-start text-sm">HR Updates</Button>
                         </CardContent>
                     </Card>
                 </div>
@@ -150,10 +147,10 @@ export default function Announcements() {
                                                         <Users className="h-4 w-4" />
                                                         {announcement.targetAudience}
                                                     </span>
-                                                    <span className="flex items-center gap-1">
+                                                    {/* <span className="flex items-center gap-1">
                                                         <Eye className="h-4 w-4" />
                                                         {announcement.views} views
-                                                    </span>
+                                                    </span> */}
                                                 </div>
                                                 <Button variant="ghost" size="sm" className="group">
                                                     Read More

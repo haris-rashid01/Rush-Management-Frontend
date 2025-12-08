@@ -11,9 +11,10 @@ interface LeaveRequestCardProps {
   startDate: string;
   endDate: string;
   reason: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "cancelled";
   onApprove?: () => void;
   onReject?: () => void;
+  onCancel?: () => void;
   testId?: string;
 }
 
@@ -27,14 +28,16 @@ export function LeaveRequestCard({
   status,
   onApprove,
   onReject,
+  onCancel,
   testId
 }: LeaveRequestCardProps) {
   const initials = employeeName.split(' ').map(n => n[0]).join('');
-  
+
   const statusColors = {
     pending: "secondary",
     approved: "default",
     rejected: "destructive",
+    cancelled: "outline"
   } as const;
 
   return (
@@ -51,7 +54,7 @@ export function LeaveRequestCard({
               <p className="text-sm text-muted-foreground">{leaveType}</p>
             </div>
           </div>
-          <Badge variant={statusColors[status]} data-testid={`${testId}-status`}>
+          <Badge variant={statusColors[status] || "secondary"} data-testid={`${testId}-status`}>
             {status.charAt(0).toUpperCase() + status.slice(1)}
           </Badge>
         </div>
@@ -67,31 +70,47 @@ export function LeaveRequestCard({
         </div>
         {status === "pending" && (
           <div className="flex gap-2 pt-2">
-            <Button
-              size="sm"
-              className="flex-1"
-              onClick={() => {
-                onApprove?.();
-                console.log(`Approved leave for ${employeeName}`);
-              }}
-              data-testid={`${testId}-approve`}
-            >
-              <Check className="h-4 w-4 mr-1" />
-              Approve
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1"
-              onClick={() => {
-                onReject?.();
-                console.log(`Rejected leave for ${employeeName}`);
-              }}
-              data-testid={`${testId}-reject`}
-            >
-              <X className="h-4 w-4 mr-1" />
-              Reject
-            </Button>
+            {(onApprove || onReject) && (
+              <>
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => {
+                    onApprove?.();
+                  }}
+                  data-testid={`${testId}-approve`}
+                >
+                  <Check className="h-4 w-4 mr-1" />
+                  Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    onReject?.();
+                  }}
+                  data-testid={`${testId}-reject`}
+                >
+                  <X className="h-4 w-4 mr-1" />
+                  Reject
+                </Button>
+              </>
+            )}
+            {onCancel && (
+              <Button
+                size="sm"
+                variant="destructive"
+                className="flex-1"
+                onClick={() => {
+                  onCancel?.();
+                }}
+                data-testid={`${testId}-cancel`}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancel Request
+              </Button>
+            )}
           </div>
         )}
       </CardContent>

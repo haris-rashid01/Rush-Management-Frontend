@@ -407,7 +407,7 @@ export default function AdminPrayerTimes() {
             <div className="space-y-2">
               <Label htmlFor="reminderMinutes">Reminder Before Prayer</Label>
               <Select
-                value={settings.notifications.reminderMinutes.toString()}
+                value={(settings.notifications?.reminderMinutes ?? 15).toString()}
                 onValueChange={(value) => handleNotificationChange('reminderMinutes', parseInt(value))}
                 disabled={!settings.notifications.enabled}
               >

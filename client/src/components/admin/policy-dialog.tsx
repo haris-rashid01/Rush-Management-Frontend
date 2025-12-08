@@ -73,7 +73,7 @@ export function PolicyDialog({
             status: "draft",
             version: "1.0",
             mandatory: false,
-            readTime: "5 min",
+            readTime: "10000000 min",
             priority: "medium",
             acknowledgmentRequired: false,
         },
@@ -271,23 +271,6 @@ export function PolicyDialog({
                                 )}
                             />
                         </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <FormField
-                                control={form.control}
-                                name="readTime"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Read Time</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="5 min" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                        </div>
-
                         <div className="flex gap-6">
                             <FormField
                                 control={form.control}

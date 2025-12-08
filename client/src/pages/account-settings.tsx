@@ -198,11 +198,8 @@ export default function AccountSettings() {
                   </Button>
                 </div>
               </div>
-
-              <Separator />
-
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                {/* <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-base">Two-Factor Authentication</Label>
                     <p className="text-sm text-muted-foreground">
@@ -221,24 +218,11 @@ export default function AccountSettings() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-base">Login Notifications</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Receive alerts for new login attempts
-                    </p>
-                  </div>
                   <Switch
                     checked={accountSettings.loginNotifications}
                     onCheckedChange={(checked) => handleSettingChange("loginNotifications", checked)}
                   />
-                </div>
-
-                <div className="flex justify-end pt-4">
-                  <Button onClick={handleSaveSettings} variant="outline" className="flex items-center gap-2">
-                    <Save className="h-4 w-4" />
-                    Save Security Settings
-                  </Button>
-                </div>
+                </div> */}
               </div>
             </CardContent>
           </Card>

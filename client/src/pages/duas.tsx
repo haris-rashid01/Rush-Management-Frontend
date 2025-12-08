@@ -1,4 +1,7 @@
 import React, { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { api } from "@/lib/api";
 import { DuaCard } from "@/components/dua-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,46 +9,241 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Search, Filter, Heart, BookOpen, Star, Volume2 } from "lucide-react";
-import { duasData, duaCategories, type Dua } from "@/data/duas";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Search, Filter, Heart, BookOpen, Star, Volume2, RefreshCw, Plus } from "lucide-react";
+import { useNotifications } from "@/hooks/use-notifications";
+import { useAuth } from "@/hooks/use-auth";
+
+interface Dua {
+  id: number;
+  title: string;
+  arabic: string;
+  transliteration: string;
+  translation: string;
+  category: string;
+  hasAudio: boolean;
+  source?: string;
+  benefits?: string;
+  tags: string[];
+  isFavorite: boolean;
+}
+
+const duaCategories = [
+  "All",
+  "Daily",
+  "Travel",
+  "Prayer",
+  "Protection",
+  "Health",
+  "Forgiveness",
+  "Gratitude",
+  "Knowledge"
+];
 
 export default function Duas() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [showAudioOnly, setShowAudioOnly] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const { showSuccess, showError } = useNotifications();
+  const queryClient = useQueryClient();
+
+  // Fetch Duas
+  const { data: duas = [], isLoading } = useQuery<Dua[]>({
+    queryKey: ['duas'],
+    queryFn: async () => {
+      const response = await api.get('/duas');
+      return response.data.data;
+    }
+  });
+
+  // Seed Mutation
+  const seedMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/duas/seed');
+      return response.data;
+    },
+    onSuccess: (data) => {
+      showSuccess("Database Seeded", data.message);
+      queryClient.invalidateQueries({ queryKey: ['duas'] });
+    },
+    onError: (error: any) => {
+      showError("Seeding Failed", error.message || "Failed to seed database");
+    }
+  });
+
+  // Create Dua Mutation
+  const createMutation = useMutation({
+    mutationFn: async (newDua: any) => {
+      const response = await api.post('/duas', newDua);
+      return response.data;
+    },
+    onSuccess: () => {
+      showSuccess("Dua Added", "New Dua has been successfully added to the collection.");
+      setIsAddOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['duas'] });
+    },
+    onError: (error: any) => {
+      showError("Failed to Add Dua", error.response?.data?.message || "Could not create dua");
+    }
+  });
+
+  // Delete Dua Mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/duas/${id}`);
+    },
+    onSuccess: () => {
+      showSuccess("Dua Deleted", "The dua has been removed.");
+      queryClient.invalidateQueries({ queryKey: ['duas'] });
+    },
+    onError: (error: any) => {
+      showError("Delete Failed", error.response?.data?.message || "Could not delete dua");
+    }
+  });
+
+  const handleCreateDua = (event: React.FormEvent) => {
+    event.preventDefault();
+    const formData = new FormData(event.target as HTMLFormElement);
+
+    // Manual construction to handle custom logic
+    const tagsString = formData.get('tags') as string;
+    const tags = tagsString ? tagsString.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+    const newDua = {
+      title: formData.get('title'),
+      arabic: formData.get('arabic'),
+      transliteration: formData.get('transliteration'),
+      translation: formData.get('translation'),
+      category: formData.get('category'),
+      source: formData.get('source'),
+      benefits: formData.get('benefits'),
+      tags: tags,
+      hasAudio: false // Default for now
+    };
+
+    createMutation.mutate(newDua);
+  };
 
   const filteredDuas = useMemo(() => {
-    return duasData.filter((dua) => {
-      const matchesSearch = 
+    return duas.filter((dua) => {
+      const matchesSearch =
         dua.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        dua.transliteration.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        dua.translation.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        dua.transliteration?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        dua.translation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         dua.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
 
       const matchesCategory = selectedCategory === "All" || dua.category === selectedCategory;
       const matchesFavorites = !showFavoritesOnly || dua.isFavorite;
-      const matchesAudio = !showAudioOnly || dua.hasAudio;
+      // const matchesAudio = !showAudioOnly || dua.hasAudio; // Deprecated audio feature support
 
-      return matchesSearch && matchesCategory && matchesFavorites && matchesAudio;
+      return matchesSearch && matchesCategory && matchesFavorites;
     });
-  }, [searchTerm, selectedCategory, showFavoritesOnly, showAudioOnly]);
+  }, [duas, searchTerm, selectedCategory, showFavoritesOnly]);
 
   const duaStats = {
-    total: duasData.length,
-    withAudio: duasData.filter(d => d.hasAudio).length,
-    categories: duaCategories.length - 1, // Exclude "All"
-    favorites: duasData.filter(d => d.isFavorite).length
+    total: duas.length,
+    withAudio: duas.filter(d => d.hasAudio).length,
+    categories: new Set(duas.map(d => d.category)).size,
+    favorites: duas.filter(d => d.isFavorite).length
   };
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold mb-1">Islamic Duas Collection</h1>
-        <p className="text-muted-foreground">
-          Comprehensive collection of authentic Islamic prayers and supplications
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold mb-1">Islamic Duas Collection</h1>
+          <p className="text-muted-foreground">
+            Comprehensive collection of authentic Islamic prayers and supplications
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {isAdmin && (
+            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" /> Add New Dua
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Add New Dua</DialogTitle>
+                  <DialogDescription>Add a new supplication to the collection.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateDua} className="space-y-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="title">Title</Label>
+                    <Input id="title" name="title" required placeholder="e.g. Dua for Entering Mosque" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="category">Category</Label>
+                    <Select name="category" required defaultValue="Daily">
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {duaCategories.filter(c => c !== 'All').map(c => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="arabic">Arabic Text</Label>
+                    <Textarea id="arabic" name="arabic" required className="font-amiri text-lg text-right" dir="rtl" placeholder="Enter Arabic text here..." />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="transliteration">Transliteration</Label>
+                    <Textarea id="transliteration" name="transliteration" required placeholder="English pronunciation..." />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="translation">Translation</Label>
+                    <Textarea id="translation" name="translation" required placeholder="English meaning..." />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="source">Source (Optional)</Label>
+                      <Input id="source" name="source" placeholder="e.g. Muslim, Bukhari" />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="tags">Tags (Comma separated)</Label>
+                      <Input id="tags" name="tags" placeholder="faith, morning, protection" />
+                    </div>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="benefits">Benefits (Optional)</Label>
+                    <Textarea id="benefits" name="benefits" placeholder="Context or benefits of this Dua..." />
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={createMutation.isPending}>
+                      {createMutation.isPending ? "Adding..." : "Add Dua"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          )}
+          {isAdmin && duas.length === 0 && (
+            <Button variant="outline" onClick={() => seedMutation.mutate()} disabled={seedMutation.isPending}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${seedMutation.isPending ? 'animate-spin' : ''}`} />
+              {seedMutation.isPending ? 'Populating...' : 'Populate Duas'}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -57,13 +255,7 @@ export default function Duas() {
             <div className="text-xs text-muted-foreground">Total Duas</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <Volume2 className="h-6 w-6 mx-auto mb-2 text-green-500" />
-            <div className="text-2xl font-bold">{duaStats.withAudio}</div>
-            <div className="text-xs text-muted-foreground">With Audio</div>
-          </CardContent>
-        </Card>
+        {/* Audio stats removed */}
         <Card>
           <CardContent className="p-4 text-center">
             <Filter className="h-6 w-6 mx-auto mb-2 text-purple-500" />
@@ -111,15 +303,7 @@ export default function Duas() {
                 <Heart className="h-3 w-3 mr-1" />
                 Favorites Only
               </Button>
-              <Button
-                variant={showAudioOnly ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowAudioOnly(!showAudioOnly)}
-                className="h-8"
-              >
-                <Volume2 className="h-3 w-3 mr-1" />
-                With Audio
-              </Button>
+              {/* Audio toggle removed */}
             </div>
 
             <ScrollArea className="w-full whitespace-nowrap">
@@ -143,9 +327,9 @@ export default function Duas() {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Showing {filteredDuas.length} of {duasData.length} duas
+                Showing {filteredDuas.length} of {duas.length} duas
               </p>
-              {(searchTerm || selectedCategory !== "All" || showFavoritesOnly || showAudioOnly) && (
+              {(searchTerm || selectedCategory !== "All" || showFavoritesOnly) && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -153,7 +337,6 @@ export default function Duas() {
                     setSearchTerm("");
                     setSelectedCategory("All");
                     setShowFavoritesOnly(false);
-                    setShowAudioOnly(false);
                   }}
                 >
                   Clear Filters
@@ -181,11 +364,11 @@ export default function Duas() {
                     transliteration={dua.transliteration}
                     translation={dua.translation}
                     category={dua.category}
-                    hasAudio={dua.hasAudio}
                     source={dua.source}
                     benefits={dua.benefits}
                     tags={dua.tags}
                     testId={`dua-${dua.id}`}
+                    onDelete={isAdmin ? () => deleteMutation.mutate(dua.id) : undefined}
                   />
                 ))}
               </div>
@@ -196,7 +379,9 @@ export default function Duas() {
         <TabsContent value="categories" className="space-y-6">
           <div className="grid gap-6">
             {duaCategories.slice(1).map((category) => {
-              const categoryDuas = duasData.filter(dua => dua.category === category);
+              const categoryDuas = duas.filter(dua => dua.category === category);
+              if (categoryDuas.length === 0) return null;
+
               return (
                 <Card key={category}>
                   <CardHeader>
@@ -218,11 +403,11 @@ export default function Duas() {
                           transliteration={dua.transliteration}
                           translation={dua.translation}
                           category={dua.category}
-                          hasAudio={dua.hasAudio}
                           source={dua.source}
                           benefits={dua.benefits}
                           tags={dua.tags}
                           testId={`dua-${dua.id}`}
+                          onDelete={isAdmin ? () => deleteMutation.mutate(dua.id) : undefined}
                         />
                       ))}
                       {categoryDuas.length > 2 && (

@@ -84,7 +84,7 @@ export function EmployeeCard({
               {getStatusIcon()}
             </div>
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -107,10 +107,10 @@ export function EmployeeCard({
                 <Mail className="h-3 w-3" />
                 <span className="truncate">{email}</span>
               </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {/* <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Phone className="h-3 w-3" />
                 <span>{phone}</span>
-              </div>
+              </div> */}
               {location && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <MapPin className="h-3 w-3" />
@@ -158,35 +158,41 @@ export function EmployeeCard({
             </div>
           </div>
         </div>
-        
-        <div className="flex gap-2 mt-4">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => {
-              onEdit?.();
-              console.log(`Edit ${name}`);
-            }}
-            data-testid={`${testId}-edit`}
-          >
-            <Edit className="h-3 w-3 mr-1" />
-            Edit
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => {
-              onDelete?.();
-              console.log(`Delete ${name}`);
-            }}
-            data-testid={`${testId}-delete`}
-          >
-            <Trash2 className="h-3 w-3 mr-1" />
-            Delete
-          </Button>
-        </div>
+
+        {(onEdit || onDelete) && (
+          <div className="flex gap-2 mt-4">
+            {onEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  onEdit();
+                  console.log(`Edit ${name}`);
+                }}
+                data-testid={`${testId}-edit`}
+              >
+                <Edit className="h-3 w-3 mr-1" />
+                Edit
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  onDelete();
+                  console.log(`Delete ${name}`);
+                }}
+                data-testid={`${testId}-delete`}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Delete
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

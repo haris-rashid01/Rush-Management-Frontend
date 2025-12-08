@@ -31,6 +31,7 @@ interface ApiLeaveRequest {
   createdAt: string;
   approvedAt?: string | null;
   rejectionReason?: string | null;
+  documents?: { name: string; path: string; type: string }[];
 }
 
 interface LeaveRequestRow {
@@ -46,6 +47,7 @@ interface LeaveRequestRow {
   approvedDate?: string;
   rejectedDate?: string;
   rejectionReason?: string;
+  documents?: { name: string; path: string; type: string }[];
 }
 
 export default function AdminLeaveRequests() {
@@ -103,10 +105,11 @@ export default function AdminLeaveRequests() {
             approvedDate: r.approvedAt ? new Date(r.approvedAt).toISOString().slice(0, 10) : undefined,
             rejectedDate: r.status === "REJECTED" ? new Date(r.createdAt).toISOString().slice(0, 10) : undefined,
             rejectionReason: r.rejectionReason ?? undefined,
+            documents: r.documents ?? [],
           };
         });
 
-        setRequests(mapped);
+        setRequests(mapped as LeaveRequestRow[]);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -205,8 +208,8 @@ export default function AdminLeaveRequests() {
       activeTab === "pending"
         ? "Pending-Leave-Requests.pdf"
         : activeTab === "approved"
-        ? "Approved-Leave-Requests.pdf"
-        : "Rejected-Leave-Requests.pdf";
+          ? "Approved-Leave-Requests.pdf"
+          : "Rejected-Leave-Requests.pdf";
 
     doc.save(filename);
   };
@@ -235,7 +238,7 @@ export default function AdminLeaveRequests() {
       <Card>
         <CardHeader><CardTitle>All Leave Requests</CardTitle></CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)}>
             <TabsList className="grid grid-cols-3">
               <TabsTrigger value="pending">Pending ({stats.pending})</TabsTrigger>
               <TabsTrigger value="approved">Approved ({stats.approved})</TabsTrigger>
@@ -253,6 +256,26 @@ export default function AdminLeaveRequests() {
                         <Badge>{request.status}</Badge> <Badge variant="outline">{request.type}</Badge>
                         <p>From {request.startDate} to {request.endDate} ({request.days} days)</p>
                         <p>Reason: {request.reason}</p>
+                        {request.documents && request.documents.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-sm font-semibold mb-1">Attached Documents:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {request.documents.map((doc, idx) => (
+                                <a
+                                  key={idx}
+                                  href={`http://localhost:3001/${doc.path}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-sm text-blue-600 hover:underline border px-2 py-1 rounded bg-blue-50"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  {doc.name}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                       </div>
                     </div>
                     {request.status === "pending" && (

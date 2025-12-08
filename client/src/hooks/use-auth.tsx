@@ -13,7 +13,7 @@ interface User {
   position?: string;
   avatar?: string;
   // Frontend roles (mapped from backend roles)
-  role: "admin" | "employee";
+  role: "admin" | "manager" | "employee";
   phone?: string;
   bio?: string;
   location?: string;
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         lastName: apiUser.lastName,
         department: apiUser.department ?? undefined,
         position: apiUser.position ?? undefined,
-        role: apiUser.role === "ADMIN" ? "admin" : "employee",
+        role: apiUser.role === "ADMIN" ? "admin" : apiUser.role === "MANAGER" ? "manager" : "employee",
         phone: apiUser.phone ?? undefined,
         bio: apiUser.bio ?? undefined,
         location: apiUser.location ?? undefined,
@@ -179,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         lastName: apiUser.lastName,
         department: apiUser.department ?? undefined,
         position: apiUser.position ?? undefined,
-        role: apiUser.role === "ADMIN" ? "admin" : "employee",
+        role: apiUser.role === "ADMIN" ? "admin" : apiUser.role === "MANAGER" ? "manager" : "employee",
         phone: apiUser.phone ?? undefined,
         bio: apiUser.bio ?? undefined,
         location: apiUser.location ?? undefined,
@@ -226,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             lastName: apiUser.lastName,
             department: apiUser.department ?? undefined,
             position: apiUser.position ?? undefined,
-            role: apiUser.role === "ADMIN" ? "admin" : "employee",
+            role: apiUser.role === "ADMIN" ? "admin" : apiUser.role === "MANAGER" ? "manager" : "employee",
             phone: apiUser.phone ?? undefined,
             bio: apiUser.bio ?? undefined,
             location: apiUser.location ?? undefined,

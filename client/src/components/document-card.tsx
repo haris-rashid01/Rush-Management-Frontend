@@ -2,13 +2,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { 
-  FileText, 
-  Download, 
-  Eye, 
-  Share2, 
-  Star, 
-  Trash2, 
+import {
+  FileText,
+  Download,
+  Eye,
+  Share2,
+  Star,
+  Trash2,
   Edit,
   File,
   Image,
@@ -33,16 +33,17 @@ interface DocumentCardProps {
   downloadCount?: number;
   permissions?: "public" | "restricted" | "confidential";
   onDownload?: () => void;
+  onView?: () => void;
   onStar?: () => void;
   onDelete?: () => void;
   testId?: string;
 }
 
-export function DocumentCard({ 
-  title, 
-  category, 
-  uploadDate, 
-  fileSize, 
+export function DocumentCard({
+  title,
+  category,
+  uploadDate,
+  fileSize,
   fileType = "pdf",
   description,
   uploadedBy,
@@ -51,12 +52,13 @@ export function DocumentCard({
   isStarred = false,
   downloadCount = 0,
   permissions = "public",
-  onDownload, 
+  onDownload,
+  onView,
   onStar,
   onDelete,
-  testId 
+  testId
 }: DocumentCardProps) {
-  
+
   const getFileIcon = (type: string) => {
     switch (type.toLowerCase()) {
       case 'pdf':
@@ -120,7 +122,7 @@ export function DocumentCard({
           <div className="h-12 w-12 rounded-md bg-muted/50 flex items-center justify-center shrink-0">
             {getFileIcon(fileType)}
           </div>
-          
+
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <h4 className="font-medium text-sm truncate" data-testid={`${testId}-title`}>
@@ -135,7 +137,7 @@ export function DocumentCard({
                 <Star className={`h-3 w-3 ${isStarred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
               </Button>
             </div>
-            
+
             <div className="flex items-center gap-2 mt-1">
               <Badge variant="secondary" className="text-xs">{category}</Badge>
               <Badge className={`text-xs ${getPermissionColor(permissions)}`}>
@@ -205,26 +207,21 @@ export function DocumentCard({
             size="sm"
             variant="outline"
             className="text-xs"
-            onClick={() => console.log(`Viewing ${title}`)}
+            onClick={onView}
+            data-testid={`${testId}-view`}
           >
             <Eye className="h-3 w-3" />
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs"
-            onClick={() => console.log(`Sharing ${title}`)}
-          >
-            <Share2 className="h-3 w-3" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-xs"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-3 w-3" />
-          </Button>
+          {onDelete && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs"
+              onClick={onDelete}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -11,12 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { 
-  CalendarDays, 
-  Clock, 
-  FileText, 
-  Users, 
-  TrendingUp, 
+import {
+  CalendarDays,
+  Clock,
+  FileText,
+  Users,
+  TrendingUp,
   AlertCircle,
   CheckCircle,
   XCircle,
@@ -76,7 +76,7 @@ export default function Leave() {
 
   const [filterStatus, setFilterStatus] = useState("all");
   const [selectedDate, setSelectedDate] = useState<Date>();
-  
+
   const { showSuccess, showError, showInfo } = useNotifications();
 
   // Leave balance data
@@ -123,10 +123,10 @@ export default function Leave() {
             r.status === "APPROVED"
               ? "approved"
               : r.status === "REJECTED"
-              ? "rejected"
-              : r.status === "CANCELLED"
-              ? "cancelled"
-              : "pending";
+                ? "rejected"
+                : r.status === "CANCELLED"
+                  ? "cancelled"
+                  : "pending";
 
           return {
             id: r.id,
@@ -166,24 +166,42 @@ export default function Leave() {
         return;
       }
 
+      const formDataToSend = new FormData();
+      formDataToSend.append('leaveType', formData.leaveType);
+      formDataToSend.append('startDate', formData.startDate);
+      formDataToSend.append('endDate', formData.endDate);
+      formDataToSend.append('reason', formData.reason);
+
+      if (formData.documents && formData.documents.length > 0) {
+        formData.documents.forEach((file) => {
+          formDataToSend.append('documents', file);
+        });
+      }
+
       const res = await fetch(`${API_BASE_URL}/leave`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          // Content-Type is inferred by browser for FormData
         },
-        body: JSON.stringify({
-          leaveType: formData.leaveType,
-          startDate: formData.startDate,
-          endDate: formData.endDate,
-          reason: formData.reason,
-        }),
+        body: formDataToSend,
       });
 
       if (!res.ok) {
         const errorJson = await res.json().catch(() => null);
         console.error("Create leave failed:", res.status, errorJson);
-        showError("Request Failed", "Could not submit your leave request");
+
+        let errorMessage = "Could not submit your leave request";
+
+        if (errorJson) {
+          if (errorJson.error) errorMessage = errorJson.error;
+          if (errorJson.details && Array.isArray(errorJson.details)) {
+            // Joi validation error details
+            errorMessage = errorJson.details.map((d: any) => d.message).join(', ');
+          }
+        }
+
+        showError("Request Failed", errorMessage);
         return;
       }
 
@@ -196,10 +214,10 @@ export default function Leave() {
           created.status === "APPROVED"
             ? "approved"
             : created.status === "REJECTED"
-            ? "rejected"
-            : created.status === "CANCELLED"
-            ? "cancelled"
-            : "pending";
+              ? "rejected"
+              : created.status === "CANCELLED"
+                ? "cancelled"
+                : "pending";
 
         const mapped: LeaveRequest = {
           id: created.id,
@@ -239,7 +257,7 @@ export default function Leave() {
   };
 
   const approveRequest = (id: number) => {
-    setLeaveRequests(prev => prev.map(req => 
+    setLeaveRequests(prev => prev.map(req =>
       req.id === id ? { ...req, status: "approved" as const, approvedBy: "HR Manager" } : req
     ));
     const request = leaveRequests.find(req => req.id === id);
@@ -247,11 +265,37 @@ export default function Leave() {
   };
 
   const rejectRequest = (id: number) => {
-    setLeaveRequests(prev => prev.map(req => 
+    setLeaveRequests(prev => prev.map(req =>
       req.id === id ? { ...req, status: "rejected" as const } : req
     ));
     const request = leaveRequests.find(req => req.id === id);
     showError("Request Rejected", `${request?.employeeName}'s leave request has been rejected`);
+  };
+
+  const handleCancel = async (id: string) => {
+    if (!confirm("Are you sure you want to cancel this leave request?")) return;
+
+    try {
+      const token = localStorage.getItem("rushcorp_token");
+      const res = await fetch(`${API_BASE_URL}/leave/${id}/cancel`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to cancel request");
+      }
+
+      setLeaveRequests(prev => prev.map(req =>
+        req.id === id ? { ...req, status: "cancelled" as const } : req
+      ));
+      showSuccess("Request Cancelled", "Leave request has been cancelled successfully");
+    } catch (err: any) {
+      showError("Action Failed", err.message);
+    }
   };
 
   const filteredRequests = leaveRequests.filter(req => {
@@ -273,16 +317,6 @@ export default function Leave() {
         <div>
           <h1 className="text-2xl font-semibold mb-1">Smart Leave Management</h1>
           <p className="text-muted-foreground">Intelligent leave tracking with automated workflows</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
-          </Button>
-          <Button variant="outline">
-            <CalendarDays className="h-4 w-4 mr-2" />
-            Leave Calendar
-          </Button>
         </div>
       </div>
 
@@ -319,13 +353,12 @@ export default function Leave() {
       </div>
 
       <Tabs defaultValue="submit" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="flex justify-around w-full grid-cols-4">
           <TabsTrigger value="submit" data-testid="tab-submit">Submit Leave</TabsTrigger>
           <TabsTrigger value="requests" data-testid="tab-requests">All Requests</TabsTrigger>
-          <TabsTrigger value="balance" data-testid="tab-balance">Leave Balance</TabsTrigger>
-          <TabsTrigger value="analytics" data-testid="tab-analytics">Analytics</TabsTrigger>
+          {/* <TabsTrigger value="balance" data-testid="tab-balance">Leave Balance</TabsTrigger> */}
         </TabsList>
-        
+
         <TabsContent value="submit" className="mt-6">
           <Card>
             <CardHeader>
@@ -456,13 +489,42 @@ export default function Leave() {
                 <div className="space-y-2">
                   <Label>Supporting Documents</Label>
                   <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 text-center">
-                    <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      Drag and drop files here, or click to browse
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      PDF, DOC, JPG up to 10MB
-                    </p>
+                    <input
+                      type="file"
+                      id="file-upload"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files) {
+                          setFormData(prev => ({
+                            ...prev,
+                            documents: Array.from(e.target.files || [])
+                          }));
+                        }
+                      }}
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    />
+                    <label htmlFor="file-upload" className="cursor-pointer">
+                      <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        {formData.documents.length > 0
+                          ? `${formData.documents.length} file(s) selected`
+                          : "Click to browse or drag files here"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        PDF, DOC, JPG up to 10MB
+                      </p>
+                    </label>
+                    {formData.documents.length > 0 && (
+                      <div className="mt-2 text-xs text-left">
+                        {formData.documents.map((file, idx) => (
+                          <div key={idx} className="flex items-center gap-1">
+                            <FileText className="h-3 w-3" />
+                            <span className="truncate max-w-[200px]">{file.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -491,7 +553,7 @@ export default function Leave() {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="requests" className="mt-6 space-y-4">
           {/* Filters */}
           <div className="flex gap-4 items-center">
@@ -506,7 +568,7 @@ export default function Leave() {
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
-            
+
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="outline">
@@ -522,9 +584,9 @@ export default function Leave() {
                   initialFocus
                 />
                 <div className="p-3 border-t">
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setSelectedDate(undefined)}
                     className="w-full"
                   >
@@ -544,15 +606,14 @@ export default function Leave() {
                 startDate={format(new Date(request.startDate), "MMM dd, yyyy")}
                 endDate={format(new Date(request.endDate), "MMM dd, yyyy")}
                 reason={request.reason}
-                status={request.status}
-                onApprove={() => approveRequest(request.id)}
-                onReject={() => rejectRequest(request.id)}
+                status={request.status as any}
+                onCancel={() => handleCancel(request.id)}
                 testId={`leave-${request.id}`}
               />
             ))}
           </div>
         </TabsContent>
-
+        {/* 
         <TabsContent value="balance" className="mt-6">
           <div className="grid gap-6">
             <Card>
@@ -571,8 +632,8 @@ export default function Leave() {
                         {balance.used}/{balance.total} days used
                       </span>
                     </div>
-                    <Progress 
-                      value={(balance.used / balance.total) * 100} 
+                    <Progress
+                      value={(balance.used / balance.total) * 100}
                       className="h-2"
                     />
                     <div className="flex justify-between text-xs text-muted-foreground">
@@ -584,7 +645,7 @@ export default function Leave() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </TabsContent> */}
 
         <TabsContent value="analytics" className="mt-6">
           <div className="grid gap-6">

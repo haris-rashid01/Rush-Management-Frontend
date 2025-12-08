@@ -24,6 +24,7 @@ import {
   Timer
 } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -33,13 +34,16 @@ export default function Dashboard() {
   const [weather, setWeather] = useState({ temp: 22, condition: "Sunny", location: "New York" });
   const [systemStatus, setSystemStatus] = useState({ wifi: 100, battery: 85, performance: 92 });
   const { showInfo } = useNotifications();
+  const { user } = useAuth();
 
   // Fetch dashboard data
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ["/api/dashboard"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/dashboard");
-      return res.json();
+      const data = await res.json();
+      console.log("Dashboard API Response:", data);
+      return data;
     }
   });
 
@@ -69,6 +73,8 @@ export default function Dashboard() {
 
   // Use fetched data or defaults
   const counts = dashboardData?.counts || {};
+  const upcomingEvents = dashboardData?.upcomingEvents || [];
+  const prayerTimes = dashboardData?.prayerTimes || [];
 
   const todayStats = {
     employees: {
@@ -81,8 +87,12 @@ export default function Dashboard() {
       approved: counts.approvedLeaves || 0,
       total: counts.totalLeaves || 0
     },
-    events: { today: 2, thisWeek: 8, upcoming: 5 }, // Still mock for now
-    tasks: { completed: 24, pending: 8, overdue: 2 } // Still mock for now
+    events: {
+      today: upcomingEvents.filter((e: any) => e.time.includes('Today') || new Date(e.time).toDateString() === new Date().toDateString()).length,
+      thisWeek: upcomingEvents.length,
+      upcoming: upcomingEvents.length
+    },
+    tasks: { completed: dashboardData?.counts?.tasksCompleted || 0, pending: dashboardData?.counts?.tasksPending || 0, overdue: 0 }
   };
 
   const quickActions = [
@@ -100,22 +110,8 @@ export default function Dashboard() {
     time: activity.time
   })) || [];
 
-  const upcomingEvents = [
-    { title: "Team Standup", time: "10:00 AM", type: "Meeting", urgent: false },
-    { title: "Client Presentation", time: "2:30 PM", type: "Presentation", urgent: true },
-    { title: "Project Review", time: "4:00 PM", type: "Review", urgent: false }
-  ];
-
-  const prayerTimes = [
-    { name: "Fajr", time: "5:30 AM", passed: true },
-    { name: "Dhuhr", time: "12:45 PM", passed: false, next: true },
-    { name: "Asr", time: "3:15 PM", passed: false },
-    { name: "Maghrib", time: "5:42 PM", passed: false },
-    { name: "Isha", time: "7:05 PM", passed: false }
-  ];
-
-  const nextPrayer = prayerTimes.find(prayer => prayer.next);
-  const timeUntilNextPrayer = nextPrayer ? "2h 30m" : "N/A";
+  const nextPrayer = prayerTimes.find((prayer: any) => prayer.next) || prayerTimes.find((prayer: any) => !prayer.passed);
+  const timeUntilNextPrayer = nextPrayer ? "Calculating..." : "N/A"; // Could implement a frontend countdown here if desired
 
   return (
     <div className="space-y-6">
@@ -124,7 +120,7 @@ export default function Dashboard() {
         <div>
           <div className="flex items-center gap-2 mb-1">
             {greetingIcon}
-            <h1 className="text-2xl font-semibold">{greeting}, John!</h1>
+            <h1 className="text-2xl font-semibold">{greeting}, {user?.firstName || "User"}!</h1>
           </div>
           <p className="text-muted-foreground">
             {format(currentTime, "EEEE, MMMM do, yyyy")} • {format(currentTime, "h:mm:ss a")}
@@ -204,18 +200,6 @@ export default function Dashboard() {
         <Card className="text-center">
           <CardContent className="p-4">
             <div className="flex items-center justify-center gap-2 mb-2">
-              <Users className="h-5 w-5 text-blue-500 dark:text-blue-400" />
-              <span className="text-sm font-medium text-foreground">Attendance</span>
-            </div>
-            <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{todayStats.employees.present}</div>
-            <div className="text-xs text-muted-foreground">of {todayStats.employees.total} present</div>
-            <Progress value={todayStats.employees.percentage} className="mt-2 h-1" />
-          </CardContent>
-        </Card>
-
-        <Card className="text-center">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-center gap-2 mb-2">
               <FileText className="h-5 w-5 text-orange-500 dark:text-orange-400" />
               <span className="text-sm font-medium text-foreground">Leave Requests</span>
             </div>
@@ -250,140 +234,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap className="h-5 w-5" />
-            Quick Actions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {quickActions.map((action, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                className="h-16 flex-col gap-2 hover:shadow-md transition-shadow"
-                onClick={() => showInfo("Navigation", `Opening ${action.label}`)}
-              >
-                <div className={`p-2 rounded-full ${action.color} text-white`}>
-                  {action.icon}
-                </div>
-                <span className="text-xs text-foreground">{action.label}</span>
-              </Button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Today's Schedule */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Today's Schedule
-              </div>
-              <Badge variant="secondary">{upcomingEvents.length} events</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {upcomingEvents.map((event, index) => (
-              <div key={index} className={`flex items-center justify-between p-3 rounded-lg border ${event.urgent ? 'bg-red-50 dark:bg-red-950/50 border-red-200 dark:border-red-800' : 'bg-muted/30'
-                }`}>
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${event.urgent ? 'bg-red-500 animate-pulse' : 'bg-blue-500'
-                    }`} />
-                  <div>
-                    <h4 className="font-medium text-sm">{event.title}</h4>
-                    <p className="text-xs text-muted-foreground">{event.type}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-medium">{event.time}</div>
-                  {event.urgent && (
-                    <Badge variant="destructive" className="text-xs">Urgent</Badge>
-                  )}
-                </div>
-              </div>
-            ))}
-            <Button variant="ghost" className="w-full text-sm">
-              View Full Schedule <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Recent Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {recentActivity.length === 0 ? (
-              <div className="text-center py-4 text-muted-foreground">No recent activity</div>
-            ) : (
-              recentActivity.map((activity: any, index: number) => (
-                <div key={index} className="flex items-center gap-3 p-2 hover:bg-muted/50 rounded-lg transition-colors">
-                  {activity.icon}
-                  <div className="flex-1">
-                    <p className="text-sm">{activity.text}</p>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{activity.time}</span>
-                </div>
-              ))
-            )}
-            <Separator />
-            <Button variant="ghost" className="w-full text-sm">
-              View All Activity <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Prayer Times Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Today's Prayer Times
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-5 gap-3">
-            {prayerTimes.map((prayer, index) => (
-              <div key={index} className={`text-center p-3 rounded-lg border ${prayer.next
-                ? 'bg-primary/10 border-primary'
-                : prayer.passed
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-muted/30'
-                }`}>
-                <div className={`text-lg font-bold ${prayer.next ? 'text-primary' : prayer.passed ? 'text-green-600' : 'text-muted-foreground'
-                  }`}>
-                  {prayer.time}
-                </div>
-                <div className={`text-sm ${prayer.next ? 'text-primary' : prayer.passed ? 'text-green-600' : 'text-muted-foreground'
-                  }`}>
-                  {prayer.name}
-                </div>
-                {prayer.passed && (
-                  <CheckCircle className="h-4 w-4 text-green-500 mx-auto mt-1" />
-                )}
-                {prayer.next && (
-                  <Timer className="h-4 w-4 text-primary mx-auto mt-1 animate-pulse" />
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Daily Dua */}
-      <DailyDuaReminder />
+    
     </div>
   );
 }

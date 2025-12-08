@@ -96,12 +96,12 @@ const menuGroups = [
   {
     label: "Company Resources",
     items: [
-      {
-        title: "Company Information",
-        url: "/company",
-        icon: Building2,
-        description: "About Rush Corporation"
-      },
+      // {
+      //   title: "Company Information",
+      //   url: "/company",
+      //   icon: Building2,
+      //   description: "About Rush Corporation"
+      // },
       {
         title: "Announcements",
         url: "/announcements",
@@ -114,12 +114,6 @@ const menuGroups = [
         icon: Shield,
         description: "Company policies and procedures"
       },
-      {
-        title: "Contact & Support",
-        url: "/contact",
-        icon: Phone,
-        description: "Get help and support"
-      }
     ]
   },
   {

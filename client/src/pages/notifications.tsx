@@ -69,35 +69,6 @@ export default function Notifications() {
           
           {/* System Info */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                System Status
-              </CardTitle>
-              <CardDescription>
-                Real-time notification system performance
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div>
-                  <div className="text-lg font-bold text-green-600">Online</div>
-                  <div className="text-xs text-muted-foreground">Status</div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-blue-600">&lt;1s</div>
-                  <div className="text-xs text-muted-foreground">Delivery</div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-purple-600">Push</div>
-                  <div className="text-xs text-muted-foreground">Browser</div>
-                </div>
-                <div>
-                  <div className="text-lg font-bold text-orange-600">Toast</div>
-                  <div className="text-xs text-muted-foreground">In-App</div>
-                </div>
-              </div>
-            </CardContent>
           </Card>
         </TabsContent>
         

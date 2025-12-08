@@ -103,10 +103,10 @@ export function UserProfile() {
           <span>Profile Settings</span>
         </DropdownMenuItem>
         
-        <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/notification-preferences")}>
+        {/* <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/notification-preferences")}>
           <Bell className="mr-2 h-4 w-4" />
           <span>Notification Preferences</span>
-        </DropdownMenuItem>
+        </DropdownMenuItem> */}
         
         <DropdownMenuItem className="cursor-pointer" onClick={() => setLocation("/account-settings")}>
           <Settings className="mr-2 h-4 w-4" />

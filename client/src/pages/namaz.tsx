@@ -1,157 +1,217 @@
-import React, { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { MapPin, Clock, Bell, Volume2, CheckCircle, Timer } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { MapPin, Bell, Timer, Compass, Settings, Loader2 } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
+import { useAuth } from "@/hooks/use-auth";
 import { prayerTimeService, PrayerSettings } from "@/services/prayerTimeService";
-import { format, differenceInMinutes, addDays, isAfter, isBefore, parse } from "date-fns";
+import { format, differenceInMinutes, addDays, isAfter } from "date-fns";
 
 export default function Namaz() {
-  const { showSuccess, showInfo, showError } = useNotifications();
-  const [location, setLocation] = useState("New York");
-  const [settings, setSettings] = useState<PrayerSettings | null>(null);
-  const [prayerTimes, setPrayerTimes] = useState<any[]>([]);
-  const [nextPrayer, setNextPrayer] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
+  const { showSuccess, showError } = useNotifications();
+  const queryClient = useQueryClient();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  useEffect(() => {
-    fetchSettings();
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000); // Update every minute
+  // Update time every minute
+  React.useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    if (settings) {
-      fetchPrayerTimes();
-    }
-  }, [settings, currentTime]); // Re-calculate when settings or time changes
+  // Fetch Settings
+  const { data: settings, isLoading: isLoadingSettings } = useQuery({
+    queryKey: ['prayerSettings'],
+    queryFn: prayerTimeService.getSettings
+  });
 
-  const fetchSettings = async () => {
-    try {
-      const data = await prayerTimeService.getSettings();
-      setSettings(data);
-      setLocation(data.location);
-    } catch (error) {
-      console.error(error);
-      showError("Error", "Failed to load prayer settings");
-    }
-  };
+  // Calculate coordinates for prayer times API
+  const lat = settings?.latitude ?? 40.7128; // Default NYC
+  const lng = settings?.longitude ?? -74.0060;
+  const method = settings?.calculationMethod ?? 2; // ISNA
 
-  const fetchPrayerTimes = async () => {
+  // Fetch Prayer Times from External API
+  const { data: prayerData, isLoading: isLoadingTimes } = useQuery({
+    queryKey: ['prayerTimes', lat, lng, method],
+    enabled: !!settings,
+    queryFn: async () => {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const response = await fetch(
+        `https://api.aladhan.com/v1/timings/${timestamp}?latitude=${lat}&longitude=${lng}&method=${method}`
+      );
+      return response.json();
+    }
+  });
+
+  // Fetch Qibla Direction
+  const { data: qiblaData } = useQuery({
+    queryKey: ['qibla', lat, lng],
+    enabled: !!settings,
+    queryFn: async () => {
+      const response = await fetch(`https://api.aladhan.com/v1/qibla/${lat}/${lng}`);
+      return response.json();
+    }
+  });
+
+  // Update Settings Mutation
+  const updateSettingsMutation = useMutation({
+    mutationFn: prayerTimeService.updateSettings,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['prayerSettings'] });
+      showSuccess("Settings Updated", "Prayer time settings have been saved.");
+      setIsSettingsOpen(false);
+    },
+    onError: () => {
+      showError("Error", "Failed to update settings");
+    }
+  });
+
+  const handleSaveSettings = (event: React.FormEvent) => {
+    event.preventDefault();
+    const formData = new FormData(event.target as HTMLFormElement);
+
+    // Construct settings object (simplified for this demo)
+    // Ideally use controlled inputs or react-hook-form
     if (!settings) return;
 
-    try {
-      const date = new Date();
-      const timestamp = Math.floor(date.getTime() / 1000);
-      const response = await fetch(
-        `https://api.aladhan.com/v1/timings/${timestamp}?latitude=${settings.latitude}&longitude=${settings.longitude}&method=${settings.calculationMethod}`
-      );
-      const data = await response.json();
-
-      if (data.code === 200) {
-        const timings = data.data.timings;
-        const prayers = [
-          { name: "Fajr", time: timings.Fajr, adjustment: settings.adjustments.fajr },
-          { name: "Dhuhr", time: timings.Dhuhr, adjustment: settings.adjustments.dhuhr },
-          { name: "Asr", time: timings.Asr, adjustment: settings.adjustments.asr },
-          { name: "Maghrib", time: timings.Maghrib, adjustment: settings.adjustments.maghrib },
-          { name: "Isha", time: timings.Isha, adjustment: settings.adjustments.isha }
-        ];
-
-        const processedPrayers = prayers.map(p => {
-          // Parse time string (HH:mm) to Date object for today
-          const [hours, minutes] = p.time.split(':').map(Number);
-          const prayerDate = new Date();
-          prayerDate.setHours(hours, minutes + p.adjustment, 0, 0);
-
-          const isPassed = isAfter(currentTime, prayerDate);
-
-          return {
-            ...p,
-            date: prayerDate,
-            displayTime: format(prayerDate, settings.display.use24HourFormat ? "HH:mm" : "h:mm a"),
-            passed: isPassed,
-            alarmEnabled: settings.notifications.enabled
-          };
-        });
-
-        setPrayerTimes(processedPrayers);
-
-        // Find next prayer
-        const next = processedPrayers.find(p => !p.passed);
-        if (next) {
-          const diff = differenceInMinutes(next.date, currentTime);
-          const hours = Math.floor(diff / 60);
-          const mins = diff % 60;
-          setNextPrayer({
-            ...next,
-            countdown: `In ${hours > 0 ? `${hours}h ` : ''}${mins}m`
-          });
-        } else {
-          // Next prayer is Fajr tomorrow
-          const fajr = processedPrayers.find(p => p.name === "Fajr");
-          if (fajr) {
-            const tomorrowFajr = addDays(fajr.date, 1);
-            const diff = differenceInMinutes(tomorrowFajr, currentTime);
-            const hours = Math.floor(diff / 60);
-            const mins = diff % 60;
-            setNextPrayer({
-              ...fajr,
-              date: tomorrowFajr,
-              displayTime: format(tomorrowFajr, settings.display.use24HourFormat ? "HH:mm" : "h:mm a"),
-              countdown: `In ${hours > 0 ? `${hours}h ` : ''}${mins}m`
-            });
-          }
-        }
+    const newSettings: Partial<PrayerSettings> = {
+      location: String(formData.get('location')),
+      latitude: Number(formData.get('latitude')),
+      longitude: Number(formData.get('longitude')),
+      calculationMethod: Number(formData.get('method')),
+      display: {
+        ...settings.display,
+        use24HourFormat: formData.get('use24Hour') === 'on'
       }
-    } catch (error) {
-      console.error("Failed to fetch prayer times", error);
-    } finally {
-      setIsLoading(false);
-    }
+    };
+
+    updateSettingsMutation.mutate(newSettings);
   };
 
-  const togglePrayerAlarm = (prayerName: string) => {
-    // Local toggle for UI only, doesn't persist to backend per-prayer yet
-    setPrayerTimes(prev => prev.map(prayer =>
-      prayer.name === prayerName
-        ? { ...prayer, alarmEnabled: !prayer.alarmEnabled }
-        : prayer
-    ));
-
-    const prayer = prayerTimes.find(p => p.name === prayerName);
-    if (prayer?.alarmEnabled) {
-      showInfo('Alarm Disabled', `${prayerName} alarm turned off`);
-    } else {
-      showSuccess('Alarm Enabled', `${prayerName} alarm turned on`);
-    }
-  };
-
-  const enabledAlarms = prayerTimes.filter(prayer => prayer.alarmEnabled).length;
-
-  if (isLoading) {
-    return <div className="text-center py-10">Loading prayer times...</div>;
+  if (isLoadingSettings) {
+    return <div className="flex h-96 items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   }
+
+  // Process Prayer Times
+  const timings = prayerData?.data?.timings;
+  const processedPrayers = timings ? [
+    { name: "Fajr", time: timings.Fajr },
+    { name: "Dhuhr", time: timings.Dhuhr },
+    { name: "Asr", time: timings.Asr },
+    { name: "Maghrib", time: timings.Maghrib },
+    { name: "Isha", time: timings.Isha }
+  ].map(p => {
+    const [hours, minutes] = p.time.split(':').map(Number);
+    const adjustment = settings?.adjustments[p.name.toLowerCase() as keyof typeof settings.adjustments] || 0;
+    const prayerDate = new Date();
+    prayerDate.setHours(hours, minutes + adjustment, 0, 0);
+    const isPassed = isAfter(currentTime, prayerDate);
+
+    return {
+      ...p,
+      date: prayerDate,
+      displayTime: format(prayerDate, settings?.display.use24HourFormat ? "HH:mm" : "h:mm a"),
+      passed: isPassed,
+      alarmEnabled: settings?.notifications.enabled
+    };
+  }) : [];
+
+  // Determine Next Prayer
+  let nextPrayer = processedPrayers.find(p => !p.passed);
+  let nextPrayerCountdown = "";
+
+  if (nextPrayer) {
+    const diff = differenceInMinutes(nextPrayer.date, currentTime);
+    const hours = Math.floor(diff / 60);
+    const mins = diff % 60;
+    nextPrayerCountdown = `In ${hours > 0 ? `${hours}h ` : ''}${mins}m`;
+  } else if (processedPrayers.length > 0) {
+    // Fajr tomorrow
+    const fajr = processedPrayers[0];
+    const tomorrowFajr = addDays(fajr.date, 1);
+    const diff = differenceInMinutes(tomorrowFajr, currentTime);
+    const hours = Math.floor(diff / 60);
+    const mins = diff % 60;
+    nextPrayer = { ...fajr, date: tomorrowFajr, displayTime: fajr.displayTime };
+    nextPrayerCountdown = `In ${hours > 0 ? `${hours}h ` : ''}${mins}m`;
+  }
+
+  const qiblaDirection = qiblaData?.data?.direction;
+  const compassRotation = qiblaDirection ? Math.round(qiblaDirection) : 0;
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold mb-1">Prayer Times</h1>
-          <p className="text-muted-foreground">Simple prayer schedule with alarms</p>
+          <p className="text-muted-foreground">Location: {settings?.location}</p>
         </div>
-        <Badge variant={enabledAlarms > 0 ? "default" : "secondary"}>
-          <Bell className="h-3 w-3 mr-1" />
-          {enabledAlarms}/5 Alarms On
-        </Badge>
+
+        {isAdmin && (
+          <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline"><Settings className="mr-2 h-4 w-4" /> Settings</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Prayer Settings</DialogTitle>
+                <DialogDescription>Configure location and calculation methods.</DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSaveSettings} className="space-y-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="location">City Name</Label>
+                  <Input id="location" name="location" defaultValue={settings?.location} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="latitude">Latitude</Label>
+                    <Input id="latitude" name="latitude" type="number" step="any" defaultValue={settings?.latitude} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="longitude">Longitude</Label>
+                    <Input id="longitude" name="longitude" type="number" step="any" defaultValue={settings?.longitude} />
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="method">Calculation Method</Label>
+                  <Select name="method" defaultValue={String(settings?.calculationMethod)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">ISNA (North America)</SelectItem>
+                      <SelectItem value="3">Muslim World League</SelectItem>
+                      <SelectItem value="4">Umm Al-Qura (Makkah)</SelectItem>
+                      <SelectItem value="5">Egyptian General Authority</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch id="use24Hour" name="use24Hour" defaultChecked={settings?.display.use24HourFormat} />
+                  <Label htmlFor="use24Hour">Use 24-hour format</Label>
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={updateSettingsMutation.isPending}>
+                    {updateSettingsMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
-      {/* Next Prayer */}
+      {/* Next Prayer Card */}
       {nextPrayer && (
         <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/20 dark:to-blue-950/20 border-green-200 dark:border-green-800">
           <CardContent className="p-6">
@@ -165,13 +225,13 @@ export default function Namaz() {
                     Next: {nextPrayer.name}
                   </h3>
                   <p className="text-sm text-green-600 dark:text-green-400">
-                    {nextPrayer.displayTime} • {nextPrayer.countdown}
+                    {nextPrayer.displayTime} • {nextPrayerCountdown}
                   </p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-right hidden sm:block">
                 <div className="text-2xl font-bold text-green-700 dark:text-green-300">
-                  {nextPrayer.countdown}
+                  {nextPrayerCountdown}
                 </div>
                 <div className="text-sm text-green-600 dark:text-green-400">remaining</div>
               </div>
@@ -180,71 +240,20 @@ export default function Namaz() {
         </Card>
       )}
 
-      {/* Location */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <MapPin className="h-5 w-5" />
-            Location
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
-            <Input
-              value={location}
-              readOnly
-              className="flex-1 bg-muted"
-            />
-            <Button variant="outline" disabled>
-              Managed by Admin
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Prayer times are calculated based on organization settings.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Prayer Times Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {prayerTimes.map((prayer) => (
-          <Card key={prayer.name} className={`text-center ${nextPrayer?.name === prayer.name
-            ? 'bg-primary/10 dark:bg-primary/20 border-primary'
-            : prayer.passed
-              ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
-              : ''
+        {processedPrayers.map((prayer) => (
+          <Card key={prayer.name} className={`text-center transition-colors ${nextPrayer?.name === prayer.name
+              ? 'bg-primary/10 dark:bg-primary/20 border-primary shadow-sm'
+              : prayer.passed
+                ? 'bg-muted/50'
+                : ''
             }`}>
             <CardContent className="p-4">
-              <div className="space-y-3">
-                <div>
-                  <h3 className="font-semibold text-lg">{prayer.name}</h3>
-                  <p className="text-2xl font-bold text-primary">{prayer.displayTime}</p>
-                  {nextPrayer?.name === prayer.name && (
-                    <p className="text-sm text-muted-foreground">{prayer.countdown}</p>
-                  )}
-                </div>
-
-                {prayer.passed && (
-                  <CheckCircle className="h-6 w-6 text-green-500 dark:text-green-400 mx-auto" />
-                )}
-
-                {nextPrayer?.name === prayer.name && (
-                  <Timer className="h-6 w-6 text-primary mx-auto animate-pulse" />
-                )}
-
-                <div className="flex items-center justify-center gap-2">
-                  <Bell className={`h-4 w-4 ${prayer.alarmEnabled ? 'text-green-500' : 'text-muted-foreground'}`} />
-                  <Switch
-                    checked={prayer.alarmEnabled}
-                    onCheckedChange={() => togglePrayerAlarm(prayer.name)}
-                    size="sm"
-                  />
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  {prayer.alarmEnabled ? 'Alarm On' : 'Alarm Off'}
-                </p>
-              </div>
+              <h3 className="font-semibold text-lg mb-1">{prayer.name}</h3>
+              <p className="text-2xl font-bold text-primary">{prayer.displayTime}</p>
+              {nextPrayer?.name === prayer.name && (
+                <Badge variant="outline" className="mt-2 text-xs border-primary/50 text-primary">Next</Badge>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -253,22 +262,31 @@ export default function Namaz() {
       {/* Qibla Direction */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Qibla Direction</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Compass className="h-5 w-5" /> Qibla Direction</CardTitle>
+          <CardDescription>Direction of Kaaba from {settings?.location}</CardDescription>
         </CardHeader>
-        <CardContent className="text-center">
-          <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-gradient-to-br from-green-100 to-blue-100 dark:from-green-900/20 dark:to-blue-900/20 border-4 border-green-200 dark:border-green-800 mb-4">
-            <div className="text-center">
-              {/* This is a placeholder calculation. Real Qibla calculation requires complex math */}
-              <div className="text-2xl font-bold text-green-700 dark:text-green-300">
-                {/* Simple approximation or just static for now as Qibla API is separate */}
-                Unknown
-              </div>
-              <div className="text-sm text-green-600 dark:text-green-400">Direction</div>
+        <CardContent className="flex flex-col items-center py-6">
+          <div className="relative w-48 h-48 border-4 border-muted rounded-full flex items-center justify-center mb-4 bg-background shadow-inner">
+            {/* Compass Face */}
+            <div className="absolute top-2 text-xs font-bold text-muted-foreground">N</div>
+            <div className="absolute bottom-2 text-xs font-bold text-muted-foreground">S</div>
+            <div className="absolute left-2 text-xs font-bold text-muted-foreground">W</div>
+            <div className="absolute right-2 text-xs font-bold text-muted-foreground">E</div>
+
+            {/* Needle */}
+            <div
+              className="w-1 h-20 bg-primary/20 absolute rounded-full transition-transform duration-1000 ease-out origin-bottom text-center pt-2"
+              style={{ transform: `rotate(${compassRotation}deg) translateY(-50%)` }}
+            >
+              <div className="w-3 h-3 bg-red-500 rounded-full mx-auto -mt-1.5 shadow-sm" />
+              <div className="w-0.5 h-full bg-red-500 mx-auto" />
+            </div>
+
+            <div className="text-center z-10 bg-background/80 px-2 py-1 rounded backdrop-blur-sm">
+              <div className="text-2xl font-bold">{Math.round(compassRotation)}°</div>
+              <div className="text-xs text-muted-foreground">from North</div>
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Qibla direction from {location}
-          </p>
         </CardContent>
       </Card>
     </div>

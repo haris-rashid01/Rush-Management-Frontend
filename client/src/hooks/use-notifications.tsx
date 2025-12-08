@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { toast } from '@/hooks/use-toast';
 import { Bell, CheckCircle, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { api } from '@/lib/api';
