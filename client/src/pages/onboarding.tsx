@@ -100,8 +100,6 @@ export default function Onboarding() {
     }
   });
 
-
-
   const [searchTerm, setSearchTerm] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");

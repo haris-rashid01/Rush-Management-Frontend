@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -41,6 +42,7 @@ import {
   deleteDocument,
   downloadDocument,
 } from "@/api/documents";
+import { userService } from "@/services/userService";
 
 export default function AdminDocuments() {
   const { token } = useAuth();
@@ -57,6 +59,7 @@ export default function AdminDocuments() {
   const [activeTab, setActiveTab] = useState("company");
   const [selectedEmployeeForView, setSelectedEmployeeForView] = useState<string>("");
   const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [uploadTargetType, setUploadTargetType] = useState<"all" | "employee">("all");
 
   const categories = [
     "HR Policies",
@@ -102,34 +105,36 @@ export default function AdminDocuments() {
     }
   };
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+
+
   // Fetch employees for dropdown
   const fetchEmployees = async () => {
     setEmployeesLoading(true);
+    setFetchError(null);
     try {
-      if (!token) return;
+      console.log("Fetching employees via userService...");
 
-      const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:3001/api";
-      // Use standard fetch or axios - let's ensure headers are correct 
-      const response = await fetch(`${API_BASE}/users?limit=100`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
+      // Use existing userService which works in Accessories
+      const params = new URLSearchParams({ limit: "100" });
+      const users = await userService.getUsers(params);
+
+      console.log("Documents Page - Employee Fetch Result:", users);
+
+      if (Array.isArray(users)) {
+        if (users.length === 0) {
+          console.warn("Fetched 0 employees.");
         }
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch employees");
-      }
-
-      const data = await response.json();
-      if (data.success && Array.isArray(data.data?.users)) {
-        setEmployees(data.data.users);
+        setEmployees(users);
       } else {
-        console.warn("Unexpected employee data format", data);
+        console.warn("Unexpected employee data format", users);
         setEmployees([]);
+        setFetchError("Invalid data format.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch employees", err);
+      setFetchError(err.message || "Failed to fetch employees.");
       setEmployees([]);
     } finally {
       setEmployeesLoading(false);
@@ -138,7 +143,7 @@ export default function AdminDocuments() {
 
   useEffect(() => {
     fetchDocuments();
-    // Fetch employees on mount or if needed for dropdowns
+    // Fetch employees on mount
     if (token) {
       fetchEmployees();
     }
@@ -152,30 +157,42 @@ export default function AdminDocuments() {
       "description"
     ) as HTMLTextAreaElement;
 
-    if (!fileInput?.files?.length) return;
+    if (!fileInput?.files?.length) {
+      showSuccess("Error", "Please select a file.");
+      return;
+    }
+    if (!titleInput.value) {
+      showSuccess("Error", "Please enter a document name.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", fileInput.files[0]);
     formData.append("title", titleInput.value);
     formData.append("category", filterCategory);
-    formData.append("title", titleInput.value);
-    formData.append("category", filterCategory);
     formData.append("description", descInput.value);
 
-    if (targetEmployee && targetEmployee !== "none") {
+    // Strict Mode Logic
+    if (activeTab === "employee") {
+      if (!targetEmployee || targetEmployee === "none") {
+        showSuccess("Error", "Please select an employee for this document.");
+        return;
+      }
       formData.append("targetUserId", targetEmployee);
     }
+    // If Company tab, we do NOT append targetUserId, effectively making it public/company-wide
 
     try {
       await uploadDocument(formData, token);
       showSuccess(
         "Document Uploaded",
-        "Document has been uploaded successfully."
+        `Document successfully uploaded for ${activeTab === 'employee' ? 'Employee' : 'Company'}.`
       );
       setIsUploadDialogOpen(false);
       fetchDocuments();
     } catch (err) {
       console.error(err);
+      showSuccess("Error", "Failed to upload document.");
     }
   };
 
@@ -209,13 +226,15 @@ export default function AdminDocuments() {
 
   const handleView = async (id: string) => {
     try {
-      const blob = await downloadDocument(id); // your existing downloadDocument function
+      const blob = await downloadDocument(id, token);
       const url = window.URL.createObjectURL(blob);
-      window.open(url, "_blank"); // opens file in a new tab
+      window.open(url, "_blank");
     } catch (error) {
       console.error("View failed", error);
     }
   };
+
+  // ... delete and download helpers ...
 
   return (
     <div className="space-y-6">
@@ -231,45 +250,73 @@ export default function AdminDocuments() {
         </div>
         <Dialog open={isUploadDialogOpen} onOpenChange={(open) => {
           setIsUploadDialogOpen(open);
-          if (open && activeTab === 'employee' && selectedEmployeeForView) {
-            setTargetEmployee(selectedEmployeeForView);
-          } else if (open && !targetEmployee) {
-            setTargetEmployee("none");
+          if (open) {
+            // Reset state based on active tab
+            if (activeTab === 'employee') {
+              // If we are in employee tab, we MUST select an employee
+              setTargetEmployee(selectedEmployeeForView || "none");
+            } else {
+              // If company tab, target is none
+              setTargetEmployee("none");
+            }
           }
         }}>
           <DialogTrigger asChild>
             <Button className="flex items-center gap-2">
               <Upload className="h-4 w-4" />
-              {activeTab === 'employee' ? 'Upload for Employee' : 'Upload Document'}
+              {activeTab === 'employee' ? 'Upload for Employee' : 'Upload Company Document'}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Upload New Document</DialogTitle>
+              <DialogTitle>
+                {activeTab === 'employee' ? 'Upload Employee-Specific Document' : 'Upload Company Document'}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="docName">Document Name</Label>
-                <Input id="docName" placeholder="Employee Handbook 2025" />
+                <Input id="docName" placeholder={activeTab === 'employee' ? "e.g., Employment Contract" : "e.g., Company Policy 2025"} />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="targetEmployee">Assign to Employee (Optional)</Label>
-                <Select value={targetEmployee} onValueChange={setTargetEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None (Public/Department)</SelectItem>
-                    {employees.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.firstName} {emp.lastName} ({emp.email})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Selecting an employee makes this document visible only to them.</p>
-              </div>
+              {/* STRICT SEPARATION: Only show Employee Select if in Employee Tab */}
+              {activeTab === 'employee' && (
+                <div className="space-y-2 border p-3 rounded-md bg-muted/10">
+                  <Label htmlFor="targetEmployee" className="font-semibold text-primary">Assign to Employee</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {employeesLoading ? "Loading..." : `Loaded ${employees.length} users`}
+                  </p>
+                  {fetchError ? (
+                    <div className="text-red-500 text-sm mb-2">
+                      <p>Error loading employees: {fetchError}</p>
+                      <Button variant="outline" size="sm" onClick={fetchEmployees} className="mt-1">Retry</Button>
+                    </div>
+                  ) : (
+                    <Select value={targetEmployee} onValueChange={setTargetEmployee}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select employee..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none" disabled>Select an employee</SelectItem>
+                        {employees.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            {emp.firstName} {emp.lastName} ({emp.email})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    This document will be <strong>Private</strong> and visible ONLY to the selected employee.
+                  </p>
+                </div>
+              )}
+
+              {activeTab === 'company' && (
+                <div className="p-3 bg-blue-50 text-blue-800 rounded-md text-sm">
+                  This document will be visible to <strong>All Employees</strong> (or filtered by Department).
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>

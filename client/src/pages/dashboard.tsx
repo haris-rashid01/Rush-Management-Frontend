@@ -110,8 +110,23 @@ export default function Dashboard() {
     time: activity.time
   })) || [];
 
+  // Determine next prayer and countdown
   const nextPrayer = prayerTimes.find((prayer: any) => prayer.next) || prayerTimes.find((prayer: any) => !prayer.passed);
-  const timeUntilNextPrayer = nextPrayer ? "Calculating..." : "N/A"; // Could implement a frontend countdown here if desired
+
+  let timeUntilNextPrayer = "N/A";
+  if (nextPrayer && nextPrayer.datetime) {
+    const prayerTime = new Date(nextPrayer.datetime);
+    const diff = Math.floor((prayerTime.getTime() - currentTime.getTime()) / 60000); // Difference in minutes
+
+    if (diff >= 0) {
+      const hours = Math.floor(diff / 60);
+      const minutes = diff % 60;
+      timeUntilNextPrayer = `${hours}h ${minutes}m`;
+    } else {
+      // If diff is negative but it's marked as next (e.g. slight overlap or passed detection lag), just show Now or Passed
+      timeUntilNextPrayer = "Now";
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -220,21 +235,9 @@ export default function Dashboard() {
             <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">{todayStats.events.thisWeek} this week</div>
           </CardContent>
         </Card>
-
-        <Card className="text-center">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <CheckCircle className="h-5 w-5 text-green-500 dark:text-green-400" />
-              <span className="text-sm font-medium text-foreground">Tasks</span>
-            </div>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{todayStats.tasks.completed}</div>
-            <div className="text-xs text-muted-foreground">completed today</div>
-            <div className="text-xs text-red-600 dark:text-red-400 mt-1">{todayStats.tasks.overdue} overdue</div>
-          </CardContent>
-        </Card>
       </div>
 
-    
+
     </div>
   );
 }
