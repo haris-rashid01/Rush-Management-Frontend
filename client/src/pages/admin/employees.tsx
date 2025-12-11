@@ -26,6 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:3001/api";
 
@@ -192,6 +194,51 @@ export default function AdminEmployees() {
       .join("")
       .toUpperCase();
   };
+  const handleExportPDF = () => {
+    if (!filteredEmployees.length) {
+      alert("No employees to export.");
+      return;
+    }
+
+    const doc = new jsPDF("p", "pt");
+
+    doc.setFontSize(18);
+    doc.text("Employee Directory", 40, 40);
+
+    const tableRows = filteredEmployees.map((emp, i) => [
+      i + 1,
+      emp.name,
+      emp.email,
+      emp.phone || "N/A",
+      emp.department,
+      emp.position,
+      emp.status.toUpperCase(),
+      emp.joinDate,
+    ]);
+
+    autoTable(doc, {
+      startY: 70,
+      head: [
+        [
+          "#",
+          "Name",
+          "Email",
+          "Phone",
+          "Department",
+          "Position",
+          "Status",
+          "Join Date",
+        ],
+      ],
+      body: tableRows,
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [0, 0, 0] },
+      margin: { left: 40, right: 40 },
+    });
+
+    doc.save(`employees_${Date.now()}.pdf`);
+  };
+
 
   return (
     <div className="space-y-6">
@@ -213,10 +260,11 @@ export default function AdminEmployees() {
               <Users className="h-5 w-5" />
               All Employees
             </CardTitle>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={handleExportPDF}>
               <Download className="h-4 w-4 mr-2" />
-              Export
+              Export PDF
             </Button>
+
           </div>
         </CardHeader>
 

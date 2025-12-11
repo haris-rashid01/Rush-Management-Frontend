@@ -18,6 +18,7 @@ export default function AdminPrayerTimes() {
     location: "Lahore, PK",
     latitude: 31.5204,
     longitude: 74.3587,
+    timezone: "Asia/Karachi",
     calculationMethod: 1, // Karachi
     asrMethod: "Standard",
     highLatitudeRule: "MiddleOfNight",
@@ -72,7 +73,7 @@ export default function AdminPrayerTimes() {
       const date = new Date();
       const timestamp = Math.floor(date.getTime() / 1000);
       const response = await fetch(
-        `https://api.aladhan.com/v1/timings/${timestamp}?latitude=${settings.latitude}&longitude=${settings.longitude}&method=${settings.calculationMethod}`
+        `https://api.aladhan.com/v1/timings/${timestamp}?latitude=${settings.latitude}&longitude=${settings.longitude}&method=${settings.calculationMethod}&timezonestring=${settings.timezone}`
       );
       const data = await response.json();
       if (data.code === 200) {
@@ -304,6 +305,25 @@ export default function AdminPrayerTimes() {
                 placeholder="e.g., New York, NY"
               />
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="timezone">Timezone</Label>
+              <Select
+                value={settings.timezone || "Asia/Karachi"}
+                onValueChange={(value) => handleInputChange('timezone', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Timezone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Asia/Karachi">Asia/Karachi (PKT)</SelectItem>
+                  <SelectItem value="Asia/Dubai">Asia/Dubai (GST)</SelectItem>
+                  <SelectItem value="Europe/London">Europe/London (GMT/BST)</SelectItem>
+                  <SelectItem value="America/New_York">America/New_York (EST/EDT)</SelectItem>
+                  <SelectItem value="UTC">UTC</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="latitude">Latitude</Label>
@@ -340,36 +360,6 @@ export default function AdminPrayerTimes() {
               <MapPin className="h-4 w-4 mr-2" />
               Detect Current Location
             </Button>
-          </CardContent>
-        </Card>
-
-
-        {/* Time Adjustments */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Manual Adjustments
-            </CardTitle>
-            <CardDescription>Fine-tune prayer times (in minutes)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'].map((prayer) => (
-              <div key={prayer} className="flex items-center justify-between">
-                <Label htmlFor={`${prayer}Adj`} className="capitalize">{prayer}</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id={`${prayer}Adj`}
-                    type="number"
-                    value={settings.adjustments[prayer as keyof typeof settings.adjustments]}
-                    onChange={(e) => handleAdjustmentChange(prayer, parseInt(e.target.value) || 0)}
-                    className="w-20 text-center"
-                    placeholder="0"
-                  />
-                  <span className="text-sm text-muted-foreground">min</span>
-                </div>
-              </div>
-            ))}
           </CardContent>
         </Card>
 

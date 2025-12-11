@@ -7,12 +7,12 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Building2, 
-  Mail, 
-  Lock, 
-  Eye, 
-  EyeOff, 
+import {
+  Building2,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
   User,
   Phone,
   MapPin,
@@ -54,7 +54,7 @@ export default function Signup() {
       return;
     }
 
-    const success = await signup({
+    const result = await signup({
       firstName: formData.firstName,
       lastName: formData.lastName,
       email: formData.email,
@@ -64,12 +64,12 @@ export default function Signup() {
       position: formData.position,
       phone: formData.phone
     });
-    
-    if (success) {
+
+    if (result.success) {
       showSuccess("Account Created", "Welcome to Rush Corporation!");
       setLocation("/");
     } else {
-      showError("Registration Failed", "Please fill in all required fields.");
+      showError("Registration Failed", result.error || "Please fill in all required fields.");
     }
     setIsLoading(false);
   };
@@ -130,7 +130,7 @@ export default function Signup() {
                   <User className="h-5 w-5" />
                   Personal Information
                 </h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="firstName" className="text-sm font-medium">First Name *</Label>
@@ -145,7 +145,7 @@ export default function Signup() {
                       required
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="lastName" className="text-sm font-medium">Last Name *</Label>
                     <Input
@@ -203,7 +203,7 @@ export default function Signup() {
                   <Briefcase className="h-5 w-5" />
                   Work Information
                 </h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="department" className="text-sm font-medium">Department</Label>
@@ -220,7 +220,7 @@ export default function Signup() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="position" className="text-sm font-medium">Position</Label>
                     <Input
@@ -244,7 +244,7 @@ export default function Signup() {
                   <Shield className="h-5 w-5" />
                   Security
                 </h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="password" className="text-sm font-medium">Password *</Label>
@@ -269,7 +269,7 @@ export default function Signup() {
                       </button>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password *</Label>
                     <div className="relative">
@@ -311,8 +311,8 @@ export default function Signup() {
                   </div>
                 </div>
 
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="w-full h-11 font-medium"
                   disabled={isLoading}
                 >

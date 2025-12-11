@@ -4,6 +4,7 @@ export interface PrayerSettings {
     location: string;
     latitude: number;
     longitude: number;
+    timezone: string;
     calculationMethod: number;
     asrMethod: string;
     highLatitudeRule: string;

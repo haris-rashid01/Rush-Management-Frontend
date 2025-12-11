@@ -114,23 +114,12 @@ export default function AdminDocuments() {
     setEmployeesLoading(true);
     setFetchError(null);
     try {
-      console.log("Fetching employees via userService...");
-
-      // Use existing userService which works in Accessories
-      const params = new URLSearchParams({ limit: "100" });
-      const users = await userService.getUsers(params);
-
-      console.log("Documents Page - Employee Fetch Result:", users);
-
-      if (Array.isArray(users)) {
-        if (users.length === 0) {
-          console.warn("Fetched 0 employees.");
-        }
+      const users = await userService.getUsersSimple();
+      if (Array.isArray(users) && users.length) {
         setEmployees(users);
       } else {
-        console.warn("Unexpected employee data format", users);
         setEmployees([]);
-        setFetchError("Invalid data format.");
+        setFetchError("No employees found.");
       }
     } catch (err: any) {
       console.error("Failed to fetch employees", err);
@@ -143,11 +132,12 @@ export default function AdminDocuments() {
 
   useEffect(() => {
     fetchDocuments();
-    // Fetch employees on mount
-    if (token) {
-      fetchEmployees();
-    }
   }, [searchQuery, filterCategory, isUploadDialogOpen, token, activeTab, selectedEmployeeForView]);
+
+  useEffect(() => {
+    // Fetch employees once on mount (or when token changes)
+    fetchEmployees();
+  }, [token]);
 
   // Upload document
   const handleUpload = async () => {

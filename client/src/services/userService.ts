@@ -25,6 +25,13 @@ export const userService = {
     getUsers: async (params?: URLSearchParams): Promise<User[]> => {
         const queryString = params ? `?${params.toString()}` : "";
         const response = await api.get(`/users${queryString}`);
+        // Backend returns { success, data: { users, pagination } }
+        return response.data.data?.users ?? [];
+    },
+
+    // Lightweight list for selects
+    getUsersSimple: async (): Promise<User[]> => {
+        const response = await api.get(`/users/simple`);
         return response.data.data?.users ?? [];
     },
 
@@ -34,7 +41,7 @@ export const userService = {
     },
 
     subscribeToPush: async (subscription: any) => {
-        const response = await api.post('/notifications/subscribe', subscription);
+        const response = await api.post("/notifications/subscribe", subscription);
         return response.data;
-    }
+    },
 };

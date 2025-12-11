@@ -30,7 +30,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
-  signup: (userData: SignupData) => Promise<boolean>;
+  signup: (userData: SignupData) => Promise<{ success: boolean; error?: string }>;
   refreshUser: () => Promise<void>;
 }
 
@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   // Check for existing session on mount
+  // Check for existing session on mount
   useEffect(() => {
     const checkAuth = async () => {
       const savedUser = localStorage.getItem("rushcorp_user");
@@ -59,9 +60,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (savedUser && token) {
         try {
-          // Start by trusting localStorage (simple for beginners)
           const userData = JSON.parse(savedUser) as User;
           setUser(userData);
+          // Verify token and refresh user data in background
+          await refreshUser();
         } catch (error) {
           console.error("Error parsing saved user data:", error);
           localStorage.removeItem("rushcorp_user");
@@ -135,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (userData: SignupData): Promise<boolean> => {
+  const signup = async (userData: SignupData): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
 
     try {
@@ -157,9 +159,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (!response.ok) {
-        console.error("Signup failed with status:", response.status);
+        let errorMessage = "Registration failed";
+        try {
+          // Attempt to parse error message from backend
+          const errorData = await response.json();
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          // If parsing fails, use status text or default message
+          console.error("Failed to parse error response:", e);
+        }
+
+        console.error("Signup failed:", errorMessage);
         setIsLoading(false);
-        return false;
+        return { success: false, error: errorMessage };
       }
 
       const json = await response.json();
@@ -169,7 +183,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!apiUser || !accessToken) {
         console.error("Unexpected signup response shape:", json);
         setIsLoading(false);
-        return false;
+        return { success: false, error: "Invalid server response" };
       }
 
       const mappedUser: User = {
@@ -195,11 +209,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(mappedUser);
       setIsLoading(false);
-      return true;
-    } catch (error) {
+      return { success: true };
+    } catch (error: any) {
       console.error("Signup error:", error);
       setIsLoading(false);
-      return false;
+      return { success: false, error: error.message || "Network error occurred" };
     }
   };
 

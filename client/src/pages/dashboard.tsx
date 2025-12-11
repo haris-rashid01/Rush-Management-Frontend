@@ -21,17 +21,29 @@ import {
   Battery,
   Zap,
   ArrowRight,
-  Timer
+  Timer,
+  Download
 } from "lucide-react";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { api } from "@/lib/api";
+
+interface HelperDocument {
+  id: number;
+  title: string;
+  category: string;
+  createdAt: string;
+  fileSize: number;
+  fileType: string;
+  uploadedBy: string;
+}
 
 export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [weather, setWeather] = useState({ temp: 22, condition: "Sunny", location: "New York" });
+  const [weather, setWeather] = useState({ temp: 22, condition: "Sunny", location: "Lahore" });
   const [systemStatus, setSystemStatus] = useState({ wifi: 100, battery: 85, performance: 92 });
   const { showInfo } = useNotifications();
   const { user } = useAuth();
@@ -44,6 +56,28 @@ export default function Dashboard() {
       const data = await res.json();
       console.log("Dashboard API Response:", data);
       return data;
+    }
+  });
+
+  // Fetch recent documents
+  const { data: recentDocuments = [] } = useQuery({
+    queryKey: ['recent-documents'],
+    queryFn: async () => {
+      const res = await api.get('/documents');
+      // Client-side sort/slice since API doesn't support limits yet, or assume default ordering
+      const docs = res.data?.data?.documents || [];
+      return docs
+        .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 5)
+        .map((doc: any) => ({
+          id: doc.id,
+          title: doc.title,
+          category: doc.category || "General",
+          createdAt: doc.createdAt,
+          fileSize: doc.fileSize,
+          fileType: doc.fileType,
+          uploadedBy: doc.user ? `${doc.user.firstName} ${doc.user.lastName}` : "Unknown"
+        }));
     }
   });
 
@@ -75,6 +109,7 @@ export default function Dashboard() {
   const counts = dashboardData?.counts || {};
   const upcomingEvents = dashboardData?.upcomingEvents || [];
   const prayerTimes = dashboardData?.prayerTimes || [];
+  const dailyDua = dashboardData?.dailyDua;
 
   const todayStats = {
     employees: {
@@ -93,7 +128,25 @@ export default function Dashboard() {
       upcoming: upcomingEvents.length
     },
     tasks: { completed: dashboardData?.counts?.tasksCompleted || 0, pending: dashboardData?.counts?.tasksPending || 0, overdue: 0 }
-  };
+  }
+
+  const handleDownload = async (doc: any) => {
+    try {
+      showInfo("Download Started", `Downloading ${doc.title}...`);
+      const response = await api.get(`/documents/${doc.id}/download`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const extension = doc.fileType?.split('/')[1] || 'file';
+      link.setAttribute('download', `${doc.title}.${extension}`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed", error);
+    }
+  };;
 
   const quickActions = [
     { icon: <FileText className="h-4 w-4" />, label: "Submit Leave", color: "bg-blue-500", href: "/leave" },
@@ -112,21 +165,7 @@ export default function Dashboard() {
 
   // Determine next prayer and countdown
   const nextPrayer = prayerTimes.find((prayer: any) => prayer.next) || prayerTimes.find((prayer: any) => !prayer.passed);
-
-  let timeUntilNextPrayer = "N/A";
-  if (nextPrayer && nextPrayer.datetime) {
-    const prayerTime = new Date(nextPrayer.datetime);
-    const diff = Math.floor((prayerTime.getTime() - currentTime.getTime()) / 60000); // Difference in minutes
-
-    if (diff >= 0) {
-      const hours = Math.floor(diff / 60);
-      const minutes = diff % 60;
-      timeUntilNextPrayer = `${hours}h ${minutes}m`;
-    } else {
-      // If diff is negative but it's marked as next (e.g. slight overlap or passed detection lag), just show Now or Passed
-      timeUntilNextPrayer = "Now";
-    }
-  }
+  const timeUntilNextPrayer = nextPrayer?.remaining || "N/A";
 
   return (
     <div className="space-y-6">
@@ -154,61 +193,94 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* System Status Bar */}
-      <Card className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/50 dark:to-green-950/50 border-blue-200 dark:border-blue-800">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <Wifi className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <span className="text-sm font-medium text-foreground">Network</span>
-                <Badge variant="secondary" className="bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200">
-                  {Math.round(systemStatus.wifi)}%
-                </Badge>
+      {/* Prayer Times & Dua Section */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Prayer Times Card */}
+        <Card className="h-full border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Timer className="h-5 w-5 text-primary" />
+              Prayer Times
+              <Badge variant="outline" className="ml-auto font-normal">
+                {format(currentTime, "EEEE, MMMM do")}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Next Prayer Highlight */}
+              <div className="flex items-center justify-between p-4 bg-background/50 rounded-lg border border-border shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Bell className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">Next: {nextPrayer?.name || "None"}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {nextPrayer ? (timeUntilNextPrayer === "Now" ? "Now" : `In ${timeUntilNextPrayer}`) : "Day complete"}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-2xl font-bold text-primary">{nextPrayer?.time}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Battery className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                <span className="text-sm font-medium text-foreground">System</span>
-                <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200">
-                  {Math.round(systemStatus.battery)}%
-                </Badge>
-              </div>
-              <div className="flex items-center gap-2">
-                <Zap className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                <span className="text-sm font-medium text-foreground">Performance</span>
-                <Badge variant="secondary" className="bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200">
-                  {Math.round(systemStatus.performance)}%
-                </Badge>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Activity className="h-4 w-4 text-green-500 dark:text-green-400 animate-pulse" />
-              <span className="text-sm text-green-600 dark:text-green-400 font-medium">All Systems Operational</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Next Prayer Highlight */}
-      <Card className="bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-950/50 dark:to-blue-950/50 border-green-200 dark:border-green-800">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
-                <Bell className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-green-800 dark:text-green-200">Next Prayer: {nextPrayer?.name}</h3>
-                <p className="text-sm text-green-600 dark:text-green-400">{nextPrayer?.time} • In {timeUntilNextPrayer}</p>
+              {/* Full Schedule */}
+              <div className="grid grid-cols-5 gap-2 text-center text-sm">
+                {prayerTimes.map((prayer: any) => (
+                  <div
+                    key={prayer.name}
+                    className={`p-2 rounded-md transition-colors ${prayer.next
+                      ? "bg-primary text-primary-foreground font-medium shadow-md"
+                      : prayer.passed
+                        ? "text-muted-foreground bg-muted/50"
+                        : "bg-background border border-border"
+                      }`}
+                  >
+                    <div className="text-xs opacity-80 mb-1">{prayer.name}</div>
+                    <div>{prayer.time}</div>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-green-700 dark:text-green-300">{timeUntilNextPrayer}</div>
-              <div className="text-sm text-green-600 dark:text-green-400">remaining</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Dua of the Day Card */}
+        <Card className="h-full border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-transparent">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sun className="h-5 w-5 text-purple-500" />
+              Dua of the Day
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dailyDua ? (
+              <div className="space-y-4 text-center">
+                <h3 className="font-semibold text-lg text-foreground/90">{dailyDua.title}</h3>
+                <div className="p-4 bg-background/50 rounded-lg border border-border/50 relative">
+                  <p className="text-2xl font-amiri leading-loose text-right dir-rtl mb-2 text-foreground/80">
+                    {dailyDua.arabic}
+                  </p>
+                  <Separator className="my-3 opacity-50" />
+                  <p className="text-sm text-muted-foreground italic mb-2">
+                    {dailyDua.transliteration}
+                  </p>
+                  <p className="text-foreground/90 font-medium">
+                    {dailyDua.translation}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[200px] text-muted-foreground">
+                <Coffee className="h-12 w-12 mb-4 opacity-20" />
+                <p>No Dua available for today</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -224,18 +296,49 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="text-center">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-center gap-2 mb-2">
-              <Calendar className="h-5 w-5 text-purple-500 dark:text-purple-400" />
-              <span className="text-sm font-medium text-foreground">Events Today</span>
-            </div>
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{todayStats.events.today}</div>
-            <div className="text-xs text-muted-foreground">scheduled events</div>
-            <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">{todayStats.events.thisWeek} this week</div>
-          </CardContent>
-        </Card>
       </div>
+
+      {/* Recent Documents */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-blue-500" />
+            Recent Documents
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {recentDocuments.length === 0 ? (
+              <div className="text-center py-4 text-muted-foreground">
+                No recent documents found
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentDocuments.map((doc: any) => (
+                  <div key={doc.id} className="flex items-center justify-between p-3 bg-card border rounded-lg hover:bg-accent/50 transition-colors">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      <div className="h-10 w-10 rounded bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                        <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{doc.title}</div>
+                        <div className="text-xs text-muted-foreground flex gap-2">
+                          <span>{doc.category}</span>
+                          <span>•</span>
+                          <span>{format(new Date(doc.createdAt), "MMM d, yyyy")}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button variant="outline" className="w-full mt-2" onClick={() => window.location.href = '/documents'}>
+              View All Documents
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
 
     </div>

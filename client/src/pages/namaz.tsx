@@ -34,10 +34,23 @@ export default function Namaz() {
     queryFn: prayerTimeService.getSettings
   });
 
-  // Calculate coordinates for prayer times API
+  // Calculate coordinates and settings for prayer times API
   const lat = settings?.latitude ?? 40.7128; // Default NYC
   const lng = settings?.longitude ?? -74.0060;
   const method = settings?.calculationMethod ?? 2; // ISNA
+  const timezone = settings?.timezone;
+  const asrSchool = settings?.asrMethod === "Hanafi" ? 1 : 0; // aladhan school: 0=Shafi/Standard,1=Hanafi
+  const highLatRule = (() => {
+    switch (settings?.highLatitudeRule) {
+      case "SeventhOfNight":
+        return 3;
+      case "AngleBased":
+        return 2;
+      case "MiddleOfNight":
+      default:
+        return 1;
+    }
+  })();
 
   // Fetch Prayer Times from External API
   const { data: prayerData, isLoading: isLoadingTimes } = useQuery({
@@ -47,6 +60,9 @@ export default function Namaz() {
       const timestamp = Math.floor(Date.now() / 1000);
       const response = await fetch(
         `https://api.aladhan.com/v1/timings/${timestamp}?latitude=${lat}&longitude=${lng}&method=${method}`
+        + (timezone ? `&timezonestring=${encodeURIComponent(timezone)}` : '')
+        + `&school=${asrSchool}`
+        + `&latitudeAdjustmentMethod=${highLatRule}`
       );
       return response.json();
     }

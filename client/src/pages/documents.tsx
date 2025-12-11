@@ -111,7 +111,27 @@ export default function Documents() {
     description: "",
     tags: "",
     permissions: "public" as const,
-    file: null as File | null
+    file: null as File | null,
+    targetUserId: ""
+  });
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ['users', 'employee'],
+    queryFn: async () => {
+      console.log("Fetching employees... isAdmin:", isAdmin);
+      if (!isAdmin) return [];
+      try {
+        // Fetch all users and filter client-side to ensure robustness
+        const res = await api.get('/users?limit=1000');
+        console.log("All users response:", res.data);
+        const allUsers = res.data.data.users || [];
+        return allUsers.filter((u: any) => u.role === 'EMPLOYEE' || u.role === 'employee');
+      } catch (err) {
+        console.error("Error fetching employees:", err);
+        return [];
+      }
+    },
+    enabled: !!isAdmin
   });
 
   const { showSuccess, showError, showInfo } = useNotifications();
@@ -146,6 +166,9 @@ export default function Documents() {
     formData.append('category', newDocument.category);
     formData.append('description', newDocument.description);
     formData.append('accessLevel', newDocument.permissions.toUpperCase());
+    if (newDocument.targetUserId) {
+      formData.append('targetUserId', newDocument.targetUserId);
+    }
 
     try {
       await api.post('/documents', formData, {
@@ -166,7 +189,8 @@ export default function Documents() {
         description: "",
         tags: "",
         permissions: "public",
-        file: null
+        file: null,
+        targetUserId: ""
       });
       showSuccess("Document Uploaded", "Document has been uploaded successfully");
     } catch (error) {
@@ -296,10 +320,6 @@ export default function Documents() {
           <p className="text-muted-foreground">Centralized document storage with advanced search and organization</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Archive className="h-4 w-4 mr-2" />
-            Archive
-          </Button>
           {isAdmin && (
             <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
               <DialogTrigger asChild>
@@ -377,6 +397,28 @@ export default function Documents() {
                       </Select>
                     </div>
                   </div>
+
+                  {isAdmin && (
+                    <div className="space-y-2">
+                      <Label htmlFor="doc-target-user">Assign to Employee (Optional)</Label>
+                      <Select
+                        value={newDocument.targetUserId || "none"}
+                        onValueChange={(value) => setNewDocument(prev => ({ ...prev, targetUserId: value === "none" ? "" : value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select employee" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None (Self/Company)</SelectItem>
+                          {employees.map((emp: any) => (
+                            <SelectItem key={emp.id} value={emp.id}>
+                              {emp.firstName} {emp.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label>File Upload *</Label>
